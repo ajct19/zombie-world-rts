@@ -33,6 +33,12 @@ Defs.T_ICECAP = 6
 Defs.KIND_NATION = 0
 Defs.KIND_TRIBE = 1
 Defs.KIND_HUMAN = 2
+Defs.KIND_ZOMBIE = 3
+Defs.TEAM_ZOMBIE = 250
+
+Defs.ZOMBIE_COLOR_PRIMARY = 0x39FF14FF
+Defs.ZOMBIE_COLORS = { 0x39FF14FF, 0x2CE64BFF, 0x57FF28FF, 0x1FD15FFF, 0x7CFF1EFF }
+Defs.ZOMBIE_STRAIN_NAMES = { "Strain Alpha", "Necro-Hive", "Spore Swarm", "Bio-Cluster", "Plague Strain", "Zero Hive" }
 
 -- Match phases
 Defs.PHASE_SPAWN = 0
@@ -134,6 +140,7 @@ Defs.OVER_DOMINATION = 0
 Defs.OVER_TIME = 1
 Defs.OVER_DEFEATED = 2
 Defs.OVER_ABANDONED = 3
+Defs.OVER_PLAGUE_PURGED = 4
 
 -- Map atlas cells (assets/icons/map_atlas.png, 8 x 2 cells of 128 px) as {x, y} (Vector2i in GDScript).
 Defs.ATLAS_CITY = { x = 0, y = 0 }

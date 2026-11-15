@@ -727,22 +727,23 @@ function SimNukes.install(C)
 		end
 		local k = self.R.K_AREA
 		local warhead_death = Rules.warhead_death
+		local zk = if self:is_infected(o) then Rules.ZOMBIE_NUKE_KILL_MULT else 1.0
 		for _ = 1, n_lost do
-			local d = math.min(k * warhead_death(o_troops[o], cap), math.max(0.0, o_troops[o] - 0.03 * cap))
+			local d = math.min(k * zk * warhead_death(o_troops[o], cap), math.max(0.0, o_troops[o] - 0.03 * cap))
 			dbg_flow[o * 5 + 3] += d
 			o_troops[o] -= d
 		end
 		for _, a in self.attacks do
 			if not a.dead and a.attacker == o then
 				for _ = 1, n_lost do
-					a.troops -= math.min(k * warhead_death(a.troops, cap), math.max(0.0, a.troops - 0.03 * cap))
+					a.troops -= math.min(k * zk * warhead_death(a.troops, cap), math.max(0.0, a.troops - 0.03 * cap))
 				end
 			end
 		end
 		for _, u in self.unit_list do
 			if not u.dead and u.owner == o and u.kind == U_TRANSPORT then
 				for _ = 1, n_lost do
-					u.troops -= math.min(k * warhead_death(u.troops, cap), math.max(0.0, u.troops - 0.03 * cap))
+					u.troops -= math.min(k * zk * warhead_death(u.troops, cap), math.max(0.0, u.troops - 0.03 * cap))
 				end
 			end
 		end

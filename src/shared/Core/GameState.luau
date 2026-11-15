@@ -41,6 +41,7 @@ local SIGNALS = {
 	"owner_eliminated", -- (id, killer)
 	"conquest", -- (conqueror, conquered, gold) Ev.CONQUEST: the gold the conqueror took
 	"reinforced", -- (owner, troops, ready_tick) the Arsenal's Reinforcements arrived
+	"bio_event", -- (kind: "outbreak" | "mutation", owner_id: number) Zombie Plague alert event
 	"bonus", -- (owner, tile, gold) Ev.BONUS: gold earned at a tile (a train's stop)
 	"owner_spawned", -- (id, tile)
 	"structure_added", -- (sid)
@@ -92,6 +93,7 @@ local function new_owner_info(id: number)
 		max_troops = 0,
 		income = 0, -- gold per second
 		traitor_until = 0, -- tick
+		immune_until = 0, -- tick
 		killer = 0,
 		-- sums of the owned tiles' x and y (territory centroid = (cx, cy) / tiles); cz unused (0)
 		cx = 0.0,
@@ -486,6 +488,26 @@ end
 function GameState.is_traitor(self: GameState, id: number): boolean
 	local o = self.owners[id]
 	return o ~= nil and o.traitor_until > self.tick
+end
+
+function GameState.is_infected(self: GameState, id: number): boolean
+	local o = self.owners[id]
+	return o ~= nil and (o.kind == Defs.KIND_ZOMBIE or o.team == Defs.TEAM_ZOMBIE)
+end
+
+function GameState.vaccine_active(self: GameState, id: number): boolean
+	local o = self.owners[id]
+	return o ~= nil and (o.immune_until or 0) > self.tick
+end
+
+function GameState.infected_tiles(self: GameState): number
+	local sum = 0
+	for _, o in self.owners do
+		if o.alive and (o.kind == Defs.KIND_ZOMBIE or o.team == Defs.TEAM_ZOMBIE) then
+			sum += o.tiles or 0
+		end
+	end
+	return sum
 end
 
 --- Switches the mirror to another map (clears the grids; a snapshot must follow).
@@ -901,6 +923,7 @@ function GameState.load_snapshot(self: GameState, snap: { [string]: any })
 		o.income = row[11]
 		o.traitor_until = row[12]
 		o.spawn_tile = row[13]
+		o.immune_until = tonumber(row[14]) or 0
 		o.spawned = o.spawn_tile >= 0
 		self.owners[o.id] = o
 	end
@@ -954,7 +977,9 @@ local HANDLERS: { [number]: (GameState, { any }) -> () } = {}
 --- Applies one Sim.step() delta table {t, tiles, flags, stats?, ev}. Fires the signals.
 function GameState.apply_delta(self: GameState, delta: { [string]: any })
 	self.tick = delta.t or (self.tick + 1)
+	local fire_outbreak = false
 	if delta.outbreak_spawned == true then
+		fire_outbreak = not self.outbreak_spawned
 		self.outbreak_spawned = true
 	end
 	local tiles = delta.tiles
@@ -990,6 +1015,9 @@ function GameState.apply_delta(self: GameState, delta: { [string]: any })
 				h(self, e)
 			end
 		end
+	end
+	if fire_outbreak and self.game_mode == "zombie" then
+		self.bio_event:Fire("outbreak", 0)
 	end
 	if next(self.shells) ~= nil then
 		local landed = {}
@@ -1081,6 +1109,7 @@ end
 HANDLERS[Ev.OWNER_ADD] = function(self, e)
 	-- Idempotent: a late joiner's snapshot may already contain this owner.
 	local o = self.owners[e[2]]
+	local was_uninfected = o ~= nil and o.kind ~= Defs.KIND_ZOMBIE and o.team ~= Defs.TEAM_ZOMBIE
 	if o == nil then
 		o = new_owner_info(e[2])
 		self.owners[o.id] = o
@@ -1092,6 +1121,9 @@ HANDLERS[Ev.OWNER_ADD] = function(self, e)
 	o.team = tonumber(e[6]) or 0
 	o.alive = true -- a re-sent OWNER_ADD also revives an owner (join → leave → join)
 	self.owner_added:Fire(o.id)
+	if was_uninfected and self.phase == Defs.PHASE_PLAYING and (o.kind == Defs.KIND_ZOMBIE or o.team == Defs.TEAM_ZOMBIE) then
+		self.bio_event:Fire("mutation", o.id)
+	end
 end
 
 HANDLERS[Ev.OWNER_OUT] = function(self, e)
@@ -1114,6 +1146,10 @@ end
 --- The Arsenal's Reinforcements arrived for owner e[2]: when its next call is ready.
 HANDLERS[Ev.REINFORCE] = function(self, e)
 	self.reinforce_ready[e[2]] = e[4]
+	local imm = tonumber(e[5]) or 0
+	if imm > 0 and self.owners[e[2]] ~= nil then
+		self.owners[e[2]].immune_until = imm
+	end
 	self.reinforced:Fire(e[2], e[3], e[4])
 end
 

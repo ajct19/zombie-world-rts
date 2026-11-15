@@ -200,8 +200,8 @@ function SimAIEconomy.install(C)
 	-- Called after scan_border(): re-tints this AI owner when it clashes with a neighbour it is
 	-- smaller than (or with any human neighbour). Rate limited per owner and worldwide.
 	function C:_consider_retint(sim, id: number, age: number)
-		-- (a team game: every owner keeps its team's colour)
-		if sim.team_mode then
+		-- (a team game: every owner keeps its team's colour; infected always keep bio-plague colours)
+		if sim.team_mode or sim:is_infected(id) then
 			return
 		end
 		if age < E.RETINT_FROM or sim.tick - self.last_retint[id] < E.RETINT_OWNER_GAP or #sim.sc_list == 0 then
@@ -396,7 +396,8 @@ function SimAIEconomy.install(C)
 			end
 			local theirs = sim.o_troops[p]
 			local attacking = sim:attack_between(p, id) ~= nil
-			local ok = attacking
+			local inf = sim:is_infected(p)
+			local ok = attacking or (not tribe and inf)
 			if not ok and not tribe then
 				-- (GDScript: if grudge… ok = true elif war-age… ok = true)
 				if
@@ -414,7 +415,7 @@ function SimAIEconomy.install(C)
 			if not ok then
 				continue
 			end
-			local s = theirs * (if attacking then 2.0 else 1.0)
+			local s = theirs * (if attacking then 2.0 else 1.0) * (if inf then 2.5 else 1.0)
 			if s > bs then
 				bs = s
 				best = p

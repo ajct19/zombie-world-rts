@@ -12,6 +12,7 @@ local UITheme = require("./UITheme")
 local W = require("./Widgets")
 local UICtx = require("./UICtx") :: any
 local Signal = UITheme.core("Signal")
+local I18n = UICtx.data("I18n")
 
 local _UIRules: any = nil
 local function UIRules(): any
@@ -270,10 +271,10 @@ function BuildButton.hint_spec(self): { [string]: any }
 		end
 	end
 	local spec: { [string]: any } = {
-		title = R.TITLES[self.kind] or self.kind,
+		title = R:title_of(self.kind),
 		badge = if not self.ctx.touch then self.hotkey else "",
 		badge_color = UITheme.TEXT_2,
-		body = R.blurb(self.kind),
+		body = R:blurb_of(self.kind),
 		rows = rows,
 	}
 	if self._av.arsenal ~= nil then
@@ -351,6 +352,9 @@ function BuildButton._redraw(self)
 	if nuke and ok then
 		bg = UITheme.c(UITheme.RED, 0.07)
 		border = UITheme.c(UITheme.RED, 0.22)
+	elseif self.kind == "reinforce" and R:is_zombie_survivor() and ok then
+		bg = UITheme.c(UITheme.CYAN, 0.1)
+		border = UITheme.c(UITheme.CYAN, 0.35)
 	end
 	if self._hover then
 		bg = if not nuke then UITheme.rgba(1, 1, 1, 0.1) else UITheme.c(UITheme.RED, 0.16)
@@ -398,12 +402,16 @@ function BuildButton._redraw(self)
 
 	local fs = math.max(11, UITheme.min_font_size)
 	local c = self._av.cost or 0
-	local ctext = if c > 0 then UITheme.fmt_cost(c) elseif c == 0 then "FREE" else "-"
+	local is_free = c == 0
+	local is_vax = self.kind == "reinforce" and R:is_zombie_survivor()
+	local ctext = if c > 0 then UITheme.fmt_cost(c) elseif is_free then I18n.t("free") else "-"
 	local ccol: any = UITheme.GOLD
 	if locked then
 		ccol = UITheme.c(UITheme.TEXT_3, 0.8)
 	elseif not ok then
 		ccol = UITheme.c(UITheme.RED, 0.95)
+	elseif is_free and is_vax then
+		ccol = UITheme.CYAN
 	end
 	-- a locked Arsenal kind: a gold lock where the cost would be
 	local lock = self._lock
@@ -442,7 +450,7 @@ function BuildButton._redraw(self)
 			Enum.TextXAlignment.Center,
 			math.max(12, UITheme.min_font_size),
 			600,
-			R.SHORT[self.kind] or self.kind,
+			R:short_of(self.kind),
 			ncol
 		)
 	else

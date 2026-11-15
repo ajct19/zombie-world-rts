@@ -29,6 +29,7 @@ local BuildButton = require("./BuildButton")
 local ShopSlot = require("./ShopSlot")
 local TrayFit = require("./TrayFit")
 local Signal = UITheme.core("Signal")
+local I18n = UICtx.data("I18n")
 
 local _UIRules: any = nil
 local function UIRules(): any
@@ -650,7 +651,7 @@ function CommandBar._reflow(self)
 	tb:add_theme_stylebox_override("pressed", T.flat(T.c(T.AMBER, 0.22), T.R_MD, T.AMBER, 1, 0.0, 5.0))
 	tb:add_theme_stylebox_override("hover_pressed", T.flat(T.c(T.AMBER, 0.28), T.R_MD, T.AMBER, 1, 0.0, 5.0))
 	if self._tray_caption == nil then
-		local cap = T.label("Build", 12, 700, T.TEXT)
+		local cap = T.label(I18n.t("bar_build"), 12, 700, T.TEXT)
 		cap.horizontal_alignment = W.ALIGN_CENTER
 		cap:set_anchors_and_offsets_preset(W.PRESET_BOTTOM_WIDE)
 		cap.offset_top = -19.0
@@ -758,7 +759,12 @@ function CommandBar.refresh(self, animate: boolean?)
 	T.set_swatch_color(self._swatch, o.color)
 	self._name:set_text(o.name)
 	local share = s:land_share(o.id)
-	self._land:set_text(string.format("%s of the world", T.fmt_pct(share)))
+	if s.game_mode == "zombie" and type(s.infected_tiles) == "function" then
+		local bio_share = s:infected_tiles() / math.max(s.map.contestable_count, 1)
+		self._land:set_text(I18n.t("bar_bio_pct", T.fmt_pct(share), T.fmt_pct(bio_share)))
+	else
+		self._land:set_text(I18n.t("bar_world_pct", T.fmt_pct(share)))
+	end
 	-- (the leader from one pass, not the whole ranking sorted, 2026-10-27)
 	local leader = ctx:leader()
 	self._crown:set_modulate_a(if leader ~= nil and leader.id == o.id then 1.0 else 0.0)
@@ -777,7 +783,8 @@ function CommandBar.refresh(self, animate: boolean?)
 	-- Growth: the troop-rate label — "+{troops gained per second}/s" (NumberFormat clamps
 	-- at 0, so a nation above its cap after losing land reads +0/s), green while the rate is not
 	-- falling and orange once it is (sample_growth). Attacks spend troops but do not slow it.
-	local per_tick = Rules.troop_growth(o.kind, o.troops, math.max(o.max_troops, 1), self:_difficulty())
+	local eff_kind = if type(s.is_infected) == "function" and s:is_infected(o.id) then Defs.KIND_ZOMBIE else o.kind
+	local per_tick = Rules.troop_growth(eff_kind, o.troops, math.max(o.max_troops, 1), self:_difficulty())
 	self._rate = per_tick * Defs.TICK_RATE
 	self._growth:set_text(UIRules().troop_rate_text(self._rate))
 	T.set_font_color(self._growth, if self._rate_up then T.GREEN else T.ORANGE)
@@ -873,12 +880,15 @@ end
 --- re-rendering the same numbers must not turn an orange label green.
 function CommandBar.sample_growth(self)
 	local ctx = self.ctx
+	local s = ctx.state
 	local o = ctx:my()
-	if ctx.state == nil or o == nil then
+	if s == nil or o == nil then
 		return
 	end
 	local Rules = UITheme.core("Rules")
-	local rate = Rules.troop_growth(o.kind, o.troops, math.max(o.max_troops, 1), self:_difficulty())
+	local Defs = UITheme.core("Defs")
+	local eff_kind = if type(s.is_infected) == "function" and s:is_infected(o.id) then Defs.KIND_ZOMBIE else o.kind
+	local rate = Rules.troop_growth(eff_kind, o.troops, math.max(o.max_troops, 1), self:_difficulty())
 	self._rate_up = UIRules().troop_rate_rising(rate, self._last_growth)
 	self._last_growth = rate
 end
@@ -912,13 +922,22 @@ function CommandBar.button(self, kind: string)
 	return self.buttons[kind]
 end
 
+function CommandBar.refresh_locale(self)
+	if self._tray_caption ~= nil then
+		self._tray_caption:set_text(I18n.t("bar_build"))
+	end
+	self:_refresh_ratio()
+	self:refresh(false)
+	self:refresh_buttons()
+end
+
 function CommandBar._refresh_ratio(self)
 	local ctx = self.ctx
 	local T = UITheme
 	local pct = math.floor(ctx.ratio * 100 + 0.5)
 	self._ratio_pct:set_text(string.format("%d%%", pct))
 	self._ratio_sends:set_text(T.fmt_troops(ctx:troops_for_ratio()))
-	self._ratio_sub:set_text(string.format("Sends %s troops", T.fmt_troops(ctx:troops_for_ratio())))
+	self._ratio_sub:set_text(I18n.t("bar_sends", T.fmt_troops(ctx:troops_for_ratio())))
 end
 
 --- Per frame (GDScript _process).

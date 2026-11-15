@@ -232,6 +232,9 @@ local function set_owner(self: any, t: number, nw: number)
 		self.o_cx[nw] += tx
 		self.o_cy[nw] += ty
 		o_tiles[nw] += 1
+		if o_tiles[nw] > self.o_peak_tiles[nw] then
+			self.o_peak_tiles[nw] = o_tiles[nw]
+		end
 		if is_coast then
 			self.o_coast[nw] += 1
 			self.o_coast_tile[nw] = t
@@ -383,6 +386,8 @@ function SimState.install(C: any)
 		self.o_shield_until = filled(MAXO, 0)
 		self.o_spawn_tile = filled(MAXO, -1)
 		self.o_killer = filled(MAXO, 0)
+		self.o_immune_until = filled(MAXO, 0)
+		self.o_peak_tiles = filled(MAXO, 0)
 		--- Owners whose conquest (Ev.CONQUEST, Sim._conquest_gold) was already announced.
 		self._conquest_sent = {} :: { [number]: boolean }
 		--- Structure counts: o_scount[id * STRUCT_KINDS + kind].
@@ -888,8 +893,16 @@ function SimState.install(C: any)
 		return (self.grudge[victim * 1024 + offender] or 0) > self.tick
 	end
 
+	function C.is_infected(self: any, id: number): boolean
+		return id > 0 and (self.o_kind[id] == Defs.KIND_ZOMBIE or self.o_team[id] == Defs.TEAM_ZOMBIE)
+	end
+
+	function C.vaccine_active(self: any, id: number): boolean
+		return id > 0 and self.o_immune_until[id] > self.tick
+	end
+
 	function C.form_alliance(self: any, a: number, b: number)
-		if self:has_alliance(a, b) then
+		if self:has_alliance(a, b) or self:is_infected(a) or self:is_infected(b) then
 			return
 		end
 		local key = pair_key(a, b)

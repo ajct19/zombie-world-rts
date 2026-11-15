@@ -126,12 +126,36 @@ local function build(K_LIN: number): any
 	local KIND_NATION = Defs.KIND_NATION
 	local KIND_TRIBE = Defs.KIND_TRIBE
 	local KIND_HUMAN = Defs.KIND_HUMAN
+	local KIND_ZOMBIE = Defs.KIND_ZOMBIE
+
+	Rules.START_TROOPS_ZOMBIE = 18000
+	Rules.PATIENT_ZERO_START_TROOPS = 38000
+	Rules.ZOMBIE_TROOP_MULT = 1.35
+	Rules.ZOMBIE_GROWTH_MULT = 1.6
+	Rules.ZOMBIE_GOLD_PER_TICK = 40.0
+	Rules.ZOMBIE_LEECH_SHARE = 0.35
+	Rules.ZOMBIE_OVERCAP_MULT = 1.25
+	Rules.ZOMBIE_BUNKER_MAG = 8.0
+	Rules.ZOMBIE_BUNKER_COST = 4.0
+	Rules.ZOMBIE_TRIBE_KILL_MULT = 2.2
+	Rules.ZOMBIE_TRIBE_SURGE = 8000
+	Rules.ZOMBIE_FALLOUT_MULT = 10.0
+	Rules.ZOMBIE_NUKE_KILL_MULT = 2.0
+	Rules.VACCINE_DURATION_TICKS = 200
+	Rules.VACCINE_DEFENSE_MULT = 0.5
+	Rules.ZOMBIE_OUTBREAK_DELAY_TICKS = 120
+	Rules.ZOMBIE_MUTATE_FIRST_TICKS = 350
+	Rules.ZOMBIE_MUTATE_INTERVAL_TICKS = 250
+	Rules.ZOMBIE_MUTATE_MAX = 3
+	Rules.ZOMBIE_WIN_SHARE = 0.80
 
 	function Rules.start_troops(kind: number, difficulty: number): number
 		if kind == KIND_TRIBE then
 			return Rules.START_TROOPS_TRIBE
 		elseif kind == KIND_NATION then
 			return Rules.NATION_START_TROOPS[clampi(difficulty, 0, 2)]
+		elseif kind == KIND_ZOMBIE then
+			return Rules.START_TROOPS_ZOMBIE
 		end
 		return Rules.START_TROOPS_HUMAN
 	end
@@ -144,6 +168,8 @@ local function build(K_LIN: number): any
 		end
 		if kind == KIND_NATION then
 			return m * Rules.NATION_TROOP_MULT[clampi(difficulty, 0, 2)]
+		elseif kind == KIND_ZOMBIE then
+			return m * Rules.ZOMBIE_TROOP_MULT
 		end
 		return m
 	end
@@ -158,6 +184,8 @@ local function build(K_LIN: number): any
 			add *= 0.5
 		elseif kind == KIND_NATION then
 			add *= Rules.NATION_GROWTH_MULT[clampi(difficulty, 0, 2)]
+		elseif kind == KIND_ZOMBIE then
+			add *= Rules.ZOMBIE_GROWTH_MULT
 		end
 		return math.min(troops + add, cap) - troops
 	end
@@ -177,6 +205,9 @@ local function build(K_LIN: number): any
 	Rules.TRIBE_GOLD_PER_TICK = 50.0
 
 	function Rules.gold_per_tick(kind: number): number
+		if kind == KIND_ZOMBIE then
+			return Rules.ZOMBIE_GOLD_PER_TICK
+		end
 		return if kind == KIND_TRIBE then 50.0 else 100.0
 	end
 
@@ -654,7 +685,7 @@ local function build(K_LIN: number): any
 
 	--- attackLogic against terra nullius: troops lost per full-size tile per unit of mag (tribes / 10, others / 5).
 	function Rules.neutral_loss_per_mag(attacker_kind: number): number
-		return 1.0 / (if attacker_kind == KIND_TRIBE then 10.0 else 5.0)
+		return 1.0 / (if attacker_kind == KIND_TRIBE or attacker_kind == KIND_ZOMBIE then 10.0 else 5.0)
 	end
 
 	-- ---------------------------------------------------------------------------------------------

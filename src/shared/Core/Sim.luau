@@ -119,6 +119,8 @@ function Sim.new(p_map: any, config: { [string]: any }?): any
 	self.outbreak_tick = 0
 	self._zombie_next_mutate = 0
 	self._zombie_mutated = 0
+	self._zombie_extra_tick = 0
+	self._d_outbreak = false
 	--- Wall-clock microseconds of the last step() (diagnostics).
 	self.last_step_usec = 0
 	--- When true, step() accumulates per-subsystem microseconds into `prof` (see PROF_NAMES).
@@ -225,7 +227,14 @@ function Sim.add_human(self: any, key: string, display_name: string): number
 	end
 	self.human_keys[key] = id
 	table.insert(self.humans, id)
-	self.o_troops[id] = Rules.START_TROOPS_HUMAN
+	if self.game_mode == "zombie" and self.zombie_role == "infected" and string.find(key, "^bot:") == nil then
+		self.o_team[id] = Defs.TEAM_ZOMBIE
+		self.o_color[id] = Defs.ZOMBIE_COLOR_PRIMARY
+		self:ev({ Ev.OWNER_ADD, id, self.o_name[id], self.o_color[id], Defs.KIND_HUMAN, Defs.TEAM_ZOMBIE })
+		self.o_troops[id] = Rules.PATIENT_ZERO_START_TROOPS
+	else
+		self.o_troops[id] = Rules.START_TROOPS_HUMAN
+	end
 	return id
 end
 
@@ -266,6 +275,9 @@ end
 
 --- Troops `id` starts with (novice bot players: the Easy nation start).
 function Sim._start_troops_of(self: any, id: number): number
+	if self:is_infected(id) then
+		return Rules.PATIENT_ZERO_START_TROOPS
+	end
 	if self:is_novice_bot(id) then
 		return Rules.start_troops(Defs.KIND_NATION, Sim.NOVICE_SKILL)
 	end
@@ -416,6 +428,7 @@ function Sim.step(self: any): { [string]: any }
 				self:_spawn_phase_tick()
 			else
 				self:construction_tick()
+				self:_zombie_tick()
 				self.ai:tick(self)
 				self:attacks_tick()
 				self:units_tick()
@@ -435,6 +448,10 @@ function Sim.step(self: any): { [string]: any }
 		table.clear(self._intents)
 	end
 	local d: { [string]: any } = { t = tick, tiles = self.d_tiles, flags = self.d_flags, ev = self.d_ev }
+	if self._d_outbreak then
+		d.outbreak_spawned = true
+		self._d_outbreak = false
+	end
 	if tick % 5 == 0 or self._force_stats then
 		d.stats = self:_stats_rows()
 		self._force_stats = false
@@ -460,6 +477,7 @@ function Sim._step_profiled(self: any)
 		return
 	end
 	self:construction_tick()
+	self:_zombie_tick()
 	t = self:_lap(2, t)
 	self.ai:tick(self)
 	t = self:_lap(3, t)
@@ -508,6 +526,7 @@ function Sim.snapshot(self: any): { [string]: any }
 			Defs.trunc(self.o_income[id] + self.o_bonus_rate[id]),
 			self.o_traitor_until[id],
 			if self.o_spawned[id] == 1 then self.o_spawn_tile[id] else -1,
+			self.o_immune_until[id],
 		})
 	end
 	-- allies: {a, b, expires_at, renewal asked bits}; requests: {from, to, tick made}
@@ -1062,8 +1081,12 @@ function Sim._intent_spawn(self: any, id: number, t: number): boolean
 	then
 		self:_recolor_human(id, t)
 		self:_set_pending(id, t)
-		self.o_troops[id] =
-			math.max(Rules.START_TROOPS_HUMAN * 0.5, self:_median_nation_troops() * Rules.LATE_JOIN_TROOP_FRACTION)
+		self.o_troops[id] = if self:is_infected(id)
+			then Rules.PATIENT_ZERO_START_TROOPS
+			else math.max(
+				Rules.START_TROOPS_HUMAN * 0.5,
+				self:_median_nation_troops() * Rules.LATE_JOIN_TROOP_FRACTION
+			)
 		self.o_gold[id] = Rules.START_GOLD
 		return true
 	end
@@ -1141,8 +1164,8 @@ end
 --- Picks human `id`'s colour for a start at `t` (see SimColors.for_human). A changed colour is
 --- announced by re-sending OWNER_ADD (the mirror updates the entry in place).
 function Sim._recolor_human(self: any, id: number, t: number)
-	if self.team_mode and self.o_team[id] ~= 0 then
-		-- (a team game: the team's colour stays)
+	if (self.team_mode and self.o_team[id] ~= 0) or self:is_infected(id) then
+		-- (a team game / Patient Zero: the faction colour stays)
 		return
 	end
 	self:set_owner_color(id, SimColors.for_human(self, id, t, Sim.COLOR_NEAR_HUMAN))
@@ -1273,7 +1296,7 @@ function Sim.team_tiles(self: any): { number }
 	local sums = table.create(#self.team_names, 0)
 	for id = 1, self.owner_total do
 		local t = self.o_team[id]
-		if t ~= 0 and self.o_alive[id] == 1 then
+		if t > 0 and t <= #self.team_names and self.o_alive[id] == 1 then
 			sums[t] += self.o_tiles[id]
 		end
 	end
@@ -1380,6 +1403,9 @@ end
 --- to `target` was made less than ALLY_REQUEST_COOLDOWN_TICKS ago.
 function Sim.ally_request(self: any, id: number, target: number): boolean
 	if target <= 0 or target > self.owner_total or target == id or self.o_alive[target] == 0 then
+		return false
+	end
+	if self:is_infected(id) or self:is_infected(target) then
 		return false
 	end
 	if self:allied(id, target) or self:has_request(id, target) then
@@ -1506,19 +1532,38 @@ function Sim._start_playing(self: any)
 		self.time_limit_ticks = self.tick + self.time_limit_s * TICK_RATE
 	end
 	self:ev({ Ev.PHASE, Defs.PHASE_PLAYING, 0 })
+	if self.game_mode == "zombie" then
+		self._zombie_mutated = 0
+		if self.zombie_role == "infected" then
+			self.outbreak_spawned = true
+			self.outbreak_tick = self.tick
+			self._zombie_extra_tick = self.tick + Rules.ZOMBIE_OUTBREAK_DELAY_TICKS
+			self._zombie_next_mutate = self.tick + Rules.ZOMBIE_MUTATE_FIRST_TICKS
+			self._d_outbreak = true
+		else
+			self.outbreak_spawned = false
+			self.outbreak_tick = self.tick + Rules.ZOMBIE_OUTBREAK_DELAY_TICKS
+			self._zombie_extra_tick = 0
+			self._zombie_next_mutate = self.outbreak_tick + Rules.ZOMBIE_MUTATE_FIRST_TICKS
+		end
+	end
 	for id = 1, self.owner_total do
 		if self.o_alive[id] == 1 and self.o_spawned[id] == 1 then
 			if self.o_kind[id] == Defs.KIND_HUMAN and not self.solo then
 				self.o_shield_until[id] = self.tick + Rules.SPAWN_SHIELD_TICKS
 			end
 			local novice = self:is_novice_bot(id)
+			local cap_kind = if self:is_infected(id)
+				then Defs.KIND_ZOMBIE
+				elseif novice then Defs.KIND_NATION
+				else self.o_kind[id]
 			self.o_cap[id] = self.R.max_troops(
-				if novice then Defs.KIND_NATION else self.o_kind[id],
+				cap_kind,
 				self.o_tiles[id],
 				0,
 				if novice then Sim.NOVICE_SKILL else self.difficulty
 			)
-			self.o_income[id] = Rules.passive_income(self.o_kind[id], self.o_tiles[id])
+			self.o_income[id] = Rules.passive_income(if self:is_infected(id) then Defs.KIND_ZOMBIE else self.o_kind[id], self.o_tiles[id])
 		end
 	end
 end
@@ -1550,7 +1595,9 @@ function Sim._economy_tick(self: any)
 		local kind = o_kind[id]
 		-- (novice bot players count as Easy nations for troops; gold stays a player's)
 		local tkind, tdiff = kind, difficulty
-		if o_bot[id] == 1 and o_skill[id] == NOVICE then
+		if self:is_infected(id) then
+			tkind = Defs.KIND_ZOMBIE
+		elseif o_bot[id] == 1 and o_skill[id] == NOVICE then
 			tkind, tdiff = Defs.KIND_NATION, NOVICE
 		end
 		-- maxTroops: + cityTroopIncrease per level of each finished city.
@@ -1560,7 +1607,7 @@ function Sim._economy_tick(self: any)
 		-- + goldAdditionRate gold every tick, never during the spawn phase.
 		o_troops[id] += troop_growth_applied(tkind, o_troops[id], cap, tdiff)
 		if (tick + id) % 10 == 0 then
-			o_income[id] = Rules.passive_income(kind, o_tiles[id])
+			o_income[id] = Rules.passive_income(if tkind == Defs.KIND_ZOMBIE then Defs.KIND_ZOMBIE else kind, o_tiles[id])
 		end
 		o_gold[id] += o_income[id] / TICK_RATE
 		if second then
@@ -1644,6 +1691,10 @@ function Sim._eliminate(self: any, id: number, killer: number)
 	local o_name = self.o_name
 	if killer > 0 then
 		self:_conquest_gold(id, killer)
+		if self.o_kind[id] == Defs.KIND_TRIBE and self:is_infected(killer) then
+			local cap_lim = math.max(self.o_cap[killer], Rules.START_TROOPS_ZOMBIE) * Rules.ZOMBIE_OVERCAP_MULT
+			self.o_troops[killer] = math.min(cap_lim, self.o_troops[killer] + Rules.ZOMBIE_TRIBE_SURGE)
+		end
 		self:msg(killer, Defs.MSG_GOOD, "You eliminated " .. o_name[id])
 	end
 	if self:is_human(id) then
@@ -1672,6 +1723,166 @@ function Sim._conquest_gold(self: any, victim: number, by: number)
 	if not self._conquest_sent[victim] then
 		self._conquest_sent[victim] = true
 		self:ev({ Ev.CONQUEST, by, victim, math.floor(gold) })
+	end
+end
+
+function Sim._spawn_outbreaks(self: any, count: number)
+	if self.map.land_count <= 0 or count <= 0 then
+		return
+	end
+	local N = self.N
+	local rng = self.rng
+	local owner = self.owner
+	local geo_manhattan = self.geo_manhattan
+	local r = self.R.SPAWN_RADIUS
+	local far_d = 25.0 * self.R.LEGACY_LIN
+	local near_d = 12.0 * self.R.LEGACY_LIN
+	local human_tiles = {}
+	for _, h in self.humans do
+		if self.o_alive[h] == 1 and self.o_spawned[h] == 1 and self.o_spawn_tile[h] >= 0 then
+			table.insert(human_tiles, self.o_spawn_tile[h])
+		end
+	end
+	local spawned = 0
+	for _ = 1, count do
+		if self.owner_total >= Defs.MAX_OWNERS - 1 then
+			break
+		end
+		local pick = -1
+		for pass = 1, 2 do
+			local min_dist = if pass == 1 then far_d else near_d
+			local tries = if pass == 1 then 400 else 250
+			for _ = 1, tries do
+				local c = rng:randi() % N
+				if not self:claimable(c) or readi32(owner, c * 4) ~= 0 or self:_owned_near(c) then
+					continue
+				end
+				local too_close = false
+				for _, ht in human_tiles do
+					if geo_manhattan(ht, c) < min_dist then
+						too_close = true
+						break
+					end
+				end
+				if not too_close and self:_spawn_disk_free(c, r) then
+					pick = c
+					break
+				end
+			end
+			if pick >= 0 then
+				break
+			end
+		end
+		if pick < 0 then
+			pick = self:_random_start(0)
+		end
+		if pick < 0 then
+			continue
+		end
+		spawned += 1
+		local col = if spawned == 1
+			then Defs.ZOMBIE_COLOR_PRIMARY
+			else Defs.ZOMBIE_COLORS[((spawned - 1) % #Defs.ZOMBIE_COLORS) + 1]
+		local name = Defs.ZOMBIE_STRAIN_NAMES[((spawned - 1) % #Defs.ZOMBIE_STRAIN_NAMES) + 1]
+		local id = self:add_owner(name, col, Defs.KIND_ZOMBIE)
+		if id <= 0 then
+			break
+		end
+		self.o_team[id] = Defs.TEAM_ZOMBIE
+		self:ev({ Ev.OWNER_ADD, id, name, col, Defs.KIND_ZOMBIE, Defs.TEAM_ZOMBIE })
+		self.o_troops[id] = Rules.START_TROOPS_ZOMBIE
+		self:_spawn_owner(id, pick, r)
+		self.o_cap[id] = self.R.max_troops(Defs.KIND_ZOMBIE, self.o_tiles[id], 0, self.difficulty)
+		self.ai:register_zombie(self, id)
+		table.insert(human_tiles, pick)
+	end
+end
+
+function Sim.mutate_owner(self: any, id: number): boolean
+	if
+		id <= 0
+		or id > self.owner_total
+		or self.o_alive[id] == 0
+		or self.o_spawned[id] == 0
+		or self.o_tiles[id] <= 0
+		or self.o_ai[id] == 0
+		or self.o_kind[id] ~= Defs.KIND_NATION
+		or self.o_bot[id] == 1
+		or self:is_infected(id)
+	then
+		return false
+	end
+	for _, a in self:allies_of(id) do
+		self:end_alliance(id, a, 0)
+	end
+	local reqs = {}
+	for _, k in self:_ordered_keys(self.requests) do
+		if k // 1024 == id or k % 1024 == id then
+			table.insert(reqs, k)
+		end
+	end
+	for _, k in reqs do
+		self:close_request(k // 1024, k % 1024)
+	end
+	self.o_kind[id] = Defs.KIND_ZOMBIE
+	self.o_team[id] = Defs.TEAM_ZOMBIE
+	self.o_color[id] = Defs.ZOMBIE_COLORS[(id % #Defs.ZOMBIE_COLORS) + 1]
+	self.o_troops[id] = math.max(self.o_troops[id] * 1.25, Rules.START_TROOPS_ZOMBIE)
+	self.o_cap[id] = self.R.max_troops(Defs.KIND_ZOMBIE, self.o_tiles[id], self.o_alevel[id * STRUCT_KINDS + Defs.S_CITY], self.difficulty)
+	self.ai:register_zombie(self, id)
+	self:ev({ Ev.OWNER_ADD, id, self.o_name[id], self.o_color[id], Defs.KIND_ZOMBIE, Defs.TEAM_ZOMBIE })
+	self._force_stats = true
+	return true
+end
+
+function Sim._check_mutations(self: any)
+	local pool = {}
+	local o_alive = self.o_alive
+	local o_tiles = self.o_tiles
+	for id = 1, self.owner_total do
+		if
+			o_alive[id] == 1
+			and self.o_spawned[id] == 1
+			and o_tiles[id] > 0
+			and self.o_ai[id] == 1
+			and self.o_kind[id] == Defs.KIND_NATION
+			and self.o_bot[id] == 0
+			and not self:is_infected(id)
+		then
+			table.insert(pool, id)
+		end
+	end
+	if #pool < 2 then
+		return
+	end
+	table.sort(pool, function(a, b)
+		if o_tiles[a] ~= o_tiles[b] then
+			return o_tiles[a] < o_tiles[b]
+		end
+		return a < b
+	end)
+	local idx = (self.rng:randi() % (#pool - 1)) + 1
+	self:mutate_owner(pool[idx])
+end
+
+function Sim._zombie_tick(self: any)
+	if self.game_mode ~= "zombie" or self.phase ~= Defs.PHASE_PLAYING then
+		return
+	end
+	if not self.outbreak_spawned and self.tick >= self.outbreak_tick then
+		self:_spawn_outbreaks(2)
+		self.outbreak_spawned = true
+		self._d_outbreak = true
+		self._force_stats = true
+	elseif self._zombie_extra_tick > 0 and self.tick >= self._zombie_extra_tick then
+		self._zombie_extra_tick = 0
+		self:_spawn_outbreaks(1)
+		self._force_stats = true
+	end
+	if self.outbreak_spawned and self._zombie_mutated < Rules.ZOMBIE_MUTATE_MAX and self.tick >= self._zombie_next_mutate then
+		self._zombie_mutated += 1
+		self._zombie_next_mutate = self.tick + Rules.ZOMBIE_MUTATE_INTERVAL_TICKS
+		self:_check_mutations()
 	end
 end
 
@@ -1706,8 +1917,41 @@ function Sim._check_victory(self: any)
 		end
 		bt = tt
 	end
-	if best > 0 and bt >= Rules.WIN_SHARE * (self.map.contestable_count - self.fallout_count) then
-		self:_game_over(best, Defs.OVER_DOMINATION, team)
+	local goal_land = math.max(1, self.map.contestable_count - self.fallout_count)
+	if self.game_mode == "zombie" then
+		local zombie_tiles = 0
+		local zombie_alive = 0
+		local best_zombie = 0
+		local best_zt = -1
+		local best_survivor = 0
+		local best_st = -1
+		for id = 1, self.owner_total do
+			if o_alive[id] == 1 then
+				if self:is_infected(id) then
+					zombie_alive += 1
+					zombie_tiles += o_tiles[id]
+					if o_tiles[id] > best_zt then
+						best_zt = o_tiles[id]
+						best_zombie = id
+					end
+				elseif self.o_kind[id] ~= Defs.KIND_TRIBE and o_tiles[id] > best_st then
+					best_st = o_tiles[id]
+					best_survivor = id
+				end
+			end
+		end
+		if zombie_tiles >= Rules.ZOMBIE_WIN_SHARE * goal_land then
+			self:_game_over(if best_zombie > 0 then best_zombie else best, Defs.OVER_DOMINATION, Defs.TEAM_ZOMBIE)
+			return
+		end
+		if self.outbreak_spawned and zombie_alive == 0 then
+			self:_game_over(if best_survivor > 0 then best_survivor else best, Defs.OVER_PLAGUE_PURGED, 0)
+			return
+		end
+	end
+	if best > 0 and bt >= Rules.WIN_SHARE * goal_land then
+		local wt = if self.game_mode == "zombie" and self:is_infected(best) then Defs.TEAM_ZOMBIE else team
+		self:_game_over(best, Defs.OVER_DOMINATION, wt)
 		return
 	end
 	if self.time_limit_ticks > 0 and self.tick >= self.time_limit_ticks then

@@ -22,6 +22,14 @@ local function T(): any
 	return _Theme
 end
 
+local _I18n: any = nil
+local function I18n(): any
+	if _I18n == nil then
+		_I18n = UICtx.data("I18n")
+	end
+	return _I18n
+end
+
 local _Arsenal: any = nil
 local function Arsenal(): any
 	if _Arsenal == nil then
@@ -161,8 +169,53 @@ function UIRules.arsenal_item(kind: string): any
 	return Arsenal().item_for(kind)
 end
 
+function UIRules.is_zombie_survivor(self: any): boolean
+	local s = self.ctx and self.ctx.state
+	if s == nil or s.game_mode ~= "zombie" then
+		return false
+	end
+	local me = self.ctx:me()
+	return me <= 0 or not s:is_infected(me)
+end
+
+function UIRules.title_of(self: any, kind: string): string
+	if self:is_zombie_survivor() then
+		if kind == "defense" then
+			return I18n().t("bunker_title")
+		elseif kind == "reinforce" then
+			return I18n().t("vaccine_title")
+		end
+	end
+	return UIRules.TITLES[kind] or kind
+end
+
+function UIRules.short_of(self: any, kind: string): string
+	if self:is_zombie_survivor() then
+		if kind == "defense" then
+			return I18n().t("bunker_short")
+		elseif kind == "reinforce" then
+			return I18n().t("vaccine_short")
+		end
+	end
+	return UIRules.SHORT[kind] or kind
+end
+
+function UIRules.blurb_of(self: any, kind: string): string
+	if self:is_zombie_survivor() then
+		if kind == "defense" then
+			return I18n().t("bunker_blurb")
+		elseif kind == "reinforce" then
+			return I18n().t("vaccine_blurb")
+		end
+	end
+	return UIRules.blurb(kind)
+end
+
 --- True when `kind` is an Arsenal kind the player hasn't unlocked.
 function UIRules.arsenal_locked(self: any, kind: string): boolean
+	if kind == "reinforce" and self:is_zombie_survivor() then
+		return false
+	end
 	local it = Arsenal().item_for(kind)
 	if it == nil then
 		return false
@@ -489,7 +542,7 @@ end
 function UIRules.cost(self: any, kind: string): number
 	local ctx = self.ctx
 	if kind == "reinforce" then
-		return Rules().REINFORCE_COST
+		return if self:is_zombie_survivor() then 0 else Rules().REINFORCE_COST
 	end
 	if ctx.state == nil then
 		return UIRules.rules_cost(kind, 0)
@@ -610,7 +663,7 @@ function UIRules.availability(self: any, kind: string): { [string]: any }
 			out.reason = "Ready in " .. T().fmt_time(math.ceil(wait / Defs.TICK_RATE))
 			return out
 		end
-		if Rules().reinforce_troops(o.troops or 0, o.max_troops or 0) <= 0 then
+		if not self:is_zombie_survivor() and Rules().reinforce_troops(o.troops or 0, o.max_troops or 0) <= 0 then
 			out.reason = "Your army is at its cap"
 			return out
 		end

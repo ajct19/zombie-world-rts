@@ -36,6 +36,7 @@ local NUKE_AGE = SimAIEconomy.NUKE_AGE
 local KIND_NATION = Defs.KIND_NATION
 local KIND_TRIBE = Defs.KIND_TRIBE
 local KIND_HUMAN = Defs.KIND_HUMAN
+local KIND_ZOMBIE = Defs.KIND_ZOMBIE
 local U_TRANSPORT = Defs.U_TRANSPORT
 
 local SimAI = {}
@@ -265,6 +266,13 @@ function SimAI:tick(sim)
 					self:_think_tribe(sim, id)
 				end
 				Coop.check()
+			end
+			continue
+		end
+		if o_kind[id] == KIND_ZOMBIE then
+			if next_think[id] <= t then
+				next_think[id] = t + 8 + rng:randi_range(0, 3)
+				self:_think_zombie(sim, id)
 			end
 			continue
 		end
@@ -526,6 +534,9 @@ function SimAI:_consider_war(sim, id: number, fill: number, age: number): boolea
 		if sim:grudge_of(id, p) then
 			s *= 1.35
 		end
+		if sim:is_infected(p) then
+			s *= 1.65
+		end
 		if at_war then
 			s *= 1.2
 		end
@@ -581,11 +592,106 @@ function SimAI:_boat_at(sim, id: number, tile: number, ratio: number): boolean
 	return ok
 end
 
+function SimAI:register_zombie(sim, id: number)
+	self.next_think[id] = sim.tick + 1
+	self.next_attack[id] = sim.tick + 2
+	self.started[id] = 1
+	self.trigger_r[id] = 0.08
+	self.reserve_r[id] = 0.0
+	self.expand_r[id] = 0.05
+	self.attack_rate[id] = 8
+	self.last_boat[id] = sim.tick
+end
+
+function SimAI:_think_zombie(sim, id: number)
+	if sim.o_alive[id] == 0 or sim.o_tiles[id] <= 0 then
+		return
+	end
+	local troops = sim.o_troops[id]
+	if troops < 180.0 then
+		return
+	end
+	sim:scan_border(id, 48)
+	if sim.sc_neutral_tile >= 0 then
+		sim:intent_attack(id, sim.sc_neutral_tile, 0.35)
+	end
+	local candidates = {}
+	local sc_count = sim.sc_count
+	local o_troops = sim.o_troops
+	local o_kind = sim.o_kind
+	for _, p in sim.sc_list do
+		if sim:is_infected(p) or sim:allied(id, p) or sim:shielded(p) or sim.o_alive[p] == 0 then
+			continue
+		end
+		local contact = sc_count[p] or 0
+		if contact <= 0 then
+			continue
+		end
+		local score = contact * (troops / math.max(o_troops[p], 1200.0))
+		if o_kind[p] == KIND_TRIBE then
+			score *= 2.2
+		elseif sim:vaccine_active(p) then
+			score *= 0.65
+		end
+		table.insert(candidates, { id = p, score = score })
+	end
+	table.sort(candidates, function(a, b)
+		if a.score ~= b.score then
+			return a.score > b.score
+		end
+		return a.id < b.id
+	end)
+	local cap_targets = math.min(#candidates, 3)
+	local ratio = if cap_targets > 1 then 0.28 else 0.42
+	for i = 1, cap_targets do
+		if sim.o_troops[id] < 150.0 then
+			break
+		end
+		local tg = candidates[i].id
+		local t = sim.sc_tile[tg]
+		if t >= 0 then
+			sim:intent_attack(id, t, ratio)
+		end
+	end
+	if cap_targets == 0 and sim.sc_neutral_tile < 0 and sim.sc_fallout_tile >= 0 and troops > sim.o_cap[id] * 0.55 then
+		sim:intent_attack(id, sim.sc_fallout_tile, 0.25)
+	end
+	if
+		sim.o_coast[id] > 0
+		and sim.o_boats[id] < Rules.max_boats(sim.o_tiles[id])
+		and sim.tick - (self.last_boat[id] or 0) >= 90
+		and sim.o_troops[id] > sim.o_cap[id] * 0.25
+		and sim.map.coast_count > 0
+	then
+		local ct = sim.map.coast_list
+		local nct = sim.map.coast_count
+		local owner = sim.owner
+		local rng = sim.rng
+		local pick = -1
+		for _ = 1, 16 do
+			local r = buffer.readi32(ct, (rng:randi() % nct) * 4)
+			if not sim:claimable(r) then
+				continue
+			end
+			local own = buffer.readi32(owner, r * 4)
+			if
+				own ~= id
+				and (own == 0 or (not sim:is_infected(own) and not sim:allied(id, own) and not sim:shielded(own)))
+			then
+				pick = r
+				break
+			end
+		end
+		if pick >= 0 and sim:launch_boat(id, pick, 0.22) then
+			self.last_boat[id] = sim.tick
+		end
+	end
+end
+
 -- Public check used by the Sim when an AI transport lands on a human's coast.
 function SimAI:may_attack_human(sim, id: number, h: number): boolean
-	-- Tribes have no human protection (a tribe never skips a human target) beyond the spawn
-	-- shield, which holds for every attacker.
-	if sim.o_kind[id] == KIND_TRIBE then
+	-- Tribes and infected hordes ignore grace windows (only spawn shield holds).
+	if sim.o_kind[id] == KIND_TRIBE or sim:is_infected(id) then
 		return not sim:shielded(h)
 	end
 	return self:_may_attack_human(sim, id, h, sim.tick - sim.playing_since)
@@ -598,6 +704,9 @@ function SimAI:_may_attack_human(sim, id: number, h: number, age: number): boole
 	if sim:shielded(h) then
 		-- (a late joiner's spawn shield: the AI's grace counts from the start of play)
 		return false
+	end
+	if sim:is_infected(id) or (sim:is_infected(h) and sim.outbreak_spawned) then
+		return true
 	end
 	local d = sim:human_difficulty(id)
 	local grace = Rules.human_grace_ticks(d) + self.grace_jitter[id]
@@ -829,13 +938,17 @@ function SimAI:_consider_nuke(sim, id: number, age: number)
 		then
 			continue
 		end
+		local inf = sim:is_infected(p)
 		local s = sim.o_tiles[p] + 0.0
 		if sim:grudge_of(id, p) then
 			s *= 1.6
 		end
-		local at_war = sim:grudge_of(id, p) or sim:attack_between(id, p) ~= nil
+		local at_war = inf or sim:grudge_of(id, p) or sim:attack_between(id, p) ~= nil
 		if not at_war then
 			continue
+		end
+		if inf then
+			s *= 2.2
 		end
 		if sim.o_troops[p] > mine then
 			s *= 1.3
@@ -983,7 +1096,7 @@ function SimAI:_consider_diplomacy(sim, id: number, age: number)
 	local best = 0
 	local best_s = 0.0
 	for _, p in sim.sc_list do
-		if sim.o_kind[p] == KIND_TRIBE or sim:allied(id, p) or sim:hostile(id, p) or sim:has_request(id, p) then
+		if sim.o_kind[p] == KIND_TRIBE or sim:is_infected(p) or sim:allied(id, p) or sim:hostile(id, p) or sim:has_request(id, p) then
 			continue
 		end
 		if sim:is_traitor(p) or sim.o_ally_count[p] >= Rules.AI_MAX_ALLIES + (if sim:is_human(p) then 2 else 0) then
@@ -1049,6 +1162,9 @@ function SimAI:_process_replies(sim)
 end
 
 function SimAI:_accept(sim, me: number, other: number): boolean
+	if sim:is_infected(me) or sim:is_infected(other) then
+		return false
+	end
 	if sim.o_ally_count[me] >= Rules.AI_MAX_ALLIES or sim:grudge_of(me, other) then
 		return false
 	end

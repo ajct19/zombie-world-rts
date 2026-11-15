@@ -375,7 +375,8 @@ function SimArsenal.install(C)
 
 	--- Reinforcements intent: Rules.REINFORCE_COST gold for a fifth of the troop cap, never past it.
 	function C:reinforce(id: number): boolean
-		if not self:has_unlock(id, UNLOCK.reinforce) then
+		local is_vax = self.game_mode == "zombie" and not self:is_infected(id)
+		if not is_vax and not self:has_unlock(id, UNLOCK.reinforce) then
 			self:msg(id, Defs.MSG_INFO, string.format(SimArsenal.LOCKED_TEXT, "Reinforcements"))
 			return false
 		end
@@ -389,18 +390,27 @@ function SimArsenal.install(C)
 			return false
 		end
 		local troops = Rules.reinforce_troops(self.o_troops[id], self.o_cap[id])
-		if troops <= 0 then
+		if not is_vax and troops <= 0 then
 			self:msg(id, Defs.MSG_INFO, "Your army is already at its cap")
 			return false
 		end
-		if self.o_gold[id] < Rules.REINFORCE_COST then
+		local cost = if is_vax then 0 else Rules.REINFORCE_COST
+		if cost > 0 and self.o_gold[id] < cost then
 			self:msg(id, Defs.MSG_INFO, "Not enough gold for Reinforcements")
 			return false
 		end
-		self.o_gold[id] -= Rules.REINFORCE_COST
-		self.o_troops[id] += troops
+		if cost > 0 then
+			self.o_gold[id] -= cost
+		end
+		local gain = math.max(troops, 0)
+		if gain > 0 then
+			self.o_troops[id] += gain
+		end
 		self.o_reinforce_tick[id] = self.tick
-		self:ev({ Ev.REINFORCE, id, troops, self.tick + Rules.REINFORCE_COOLDOWN_TICKS })
+		if is_vax then
+			self.o_immune_until[id] = self.tick + Rules.VACCINE_DURATION_TICKS
+		end
+		self:ev({ Ev.REINFORCE, id, gain, self.tick + Rules.REINFORCE_COOLDOWN_TICKS, if is_vax then self.o_immune_until[id] else 0 })
 		self._force_stats = true
 		return true
 	end
