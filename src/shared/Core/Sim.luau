@@ -113,6 +113,12 @@ function Sim.new(p_map: any, config: { [string]: any }?): any
 	self.winner_team = 0
 	self._team_n = {} :: { [number]: number }
 	self.nation_limit = if type(cfg.nation_limit) == "number" then math.max(Defs.trunc(cfg.nation_limit), 0) else nil
+	self.game_mode = if cfg.game_mode == "zombie" then "zombie" else "classic"
+	self.zombie_role = if self.game_mode == "zombie" and cfg.zombie_role == "infected" then "infected" else "survivor"
+	self.outbreak_spawned = false
+	self.outbreak_tick = 0
+	self._zombie_next_mutate = 0
+	self._zombie_mutated = 0
 	--- Wall-clock microseconds of the last step() (diagnostics).
 	self.last_step_usec = 0
 	--- When true, step() accumulates per-subsystem microseconds into `prof` (see PROF_NAMES).
@@ -529,6 +535,10 @@ function Sim.snapshot(self: any): { [string]: any }
 		built = self:built_rows(),
 		winner = self.winner,
 		over_reason = self.over_reason,
+		game_mode = self.game_mode,
+		zombie_role = self.zombie_role,
+		outbreak_spawned = self.outbreak_spawned,
+		outbreak_tick = self.outbreak_tick,
 		teams = if #self.team_names > 0 then self.team_names else nil,
 		winner_team = if self.winner_team ~= 0 then self.winner_team else nil,
 		owner = GameState.encode_grid(self.owner),

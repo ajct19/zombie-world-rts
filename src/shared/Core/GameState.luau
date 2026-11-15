@@ -202,6 +202,10 @@ function GameState.new(world: any?)
 	self.built = {} :: { [number]: { [number]: number } }
 	self.winner = 0
 	self.over_reason = -1
+	self.game_mode = "classic"
+	self.zombie_role = "survivor"
+	self.outbreak_spawned = false
+	self.outbreak_tick = 0
 	--- Team games (Core/Teams): the team names (empty outside one) and the team that won (0: none).
 	self.team_names = {} :: { string }
 	self.winner_team = 0
@@ -833,6 +837,10 @@ function GameState.load_snapshot(self: GameState, snap: { [string]: any })
 	end
 	self.winner = snap.winner or 0
 	self.over_reason = snap.over_reason or -1
+	self.game_mode = if snap.game_mode == "zombie" then "zombie" else "classic"
+	self.zombie_role = if self.game_mode == "zombie" and snap.zombie_role == "infected" then "infected" else "survivor"
+	self.outbreak_spawned = snap.outbreak_spawned == true
+	self.outbreak_tick = tonumber(snap.outbreak_tick) or 0
 	self.team_names = if type(snap.teams) == "table" then snap.teams else {}
 	self.winner_team = tonumber(snap.winner_team) or 0
 	clear(self.owners)
@@ -946,6 +954,9 @@ local HANDLERS: { [number]: (GameState, { any }) -> () } = {}
 --- Applies one Sim.step() delta table {t, tiles, flags, stats?, ev}. Fires the signals.
 function GameState.apply_delta(self: GameState, delta: { [string]: any })
 	self.tick = delta.t or (self.tick + 1)
+	if delta.outbreak_spawned == true then
+		self.outbreak_spawned = true
+	end
 	local tiles = delta.tiles
 	if tiles ~= nil and #tiles > 0 then
 		self.tiles_changed:Fire(tiles, self:_apply_tiles(tiles))

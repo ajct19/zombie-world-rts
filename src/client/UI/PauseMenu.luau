@@ -50,6 +50,7 @@ function Switch.new(text: string, icon_name: string)
 	local l = UITheme.label(text, 14, 600)
 	l.size_flags_vertical = W.SHRINK_CENTER
 	h:add_child(l)
+	self._label = l
 	-- Track + knob (drawn parts).
 	local track = Instance.new("Frame")
 	track.Name = "Track"
@@ -82,6 +83,12 @@ end
 function Switch.set_on(self, v: boolean)
 	self.on = v
 	self:set_process(true)
+end
+
+function Switch.set_text(self, s: string)
+	if self._label ~= nil then
+		self._label:set_text(s)
+	end
 end
 
 function Switch._process(self, delta: number)
@@ -183,6 +190,7 @@ function VolumeRow.new(text: string, icon_name: string)
 	local l = UITheme.label(text, 14, 600)
 	l.size_flags_vertical = W.SHRINK_CENTER
 	h:add_child(l)
+	self._label = l
 	local function part(name: string, z: number): Frame
 		local f = Instance.new("Frame")
 		f.Name = name
@@ -300,6 +308,12 @@ function VolumeRow.set_value(self, v: number)
 	self:_draw_row()
 end
 
+function VolumeRow.set_text(self, s: string)
+	if self._label ~= nil then
+		self._label:set_text(s)
+	end
+end
+
 function VolumeRow._on_geometry(self)
 	self:_draw_row()
 end
@@ -348,6 +362,7 @@ function PauseMenu.new(c: any)
 	self.help_requested = Signal.new()
 	self.leave_requested = Signal.new()
 	self.labels_toggled = Signal.new()
+	self.language_toggled = Signal.new()
 	self.music_toggled = Signal.new()
 	--- (v 0..1, final): the music volume slider; final once the drag ends (UIRoot saves then)
 	self.music_volume_changed = Signal.new()
@@ -435,9 +450,15 @@ function PauseMenu.new(c: any)
 			self:close()
 		end
 	end)
-	self._labels = Switch.new("Territory labels", "layers")
+	self._labels = Switch.new(UICtx.t("pause_labels"), "layers")
 	self._labels.pressed:Connect(function()
 		self.labels_toggled:Fire(self._labels.on)
+	end)
+	self._lang_btn = UITheme.button(UICtx.t("pause_lang"), "GlassButton", "globe", 46.0)
+	self._lang_btn.alignment = W.ALIGN_LEFT
+	self._lang_btn:set_font_size(14)
+	self._lang_btn.pressed:Connect(function()
+		self.language_toggled:Fire()
 	end)
 	-- Music: one slider row (0% = off), as Tribes' settings. Music stays on/off underneath (the top bar's
 	-- button and M toggle it): 0% is silent at once and switches it off when the finger lifts, any level
@@ -521,7 +542,8 @@ function PauseMenu.new(c: any)
 	self._confirm_text:set_min_size(Vector2.new(320, 0))
 	self._confirm:add_child(self._confirm_text)
 	local row = UITheme.hbox(10)
-	local cancel = UITheme.button("Stay", "GlassButton", "", 46.0)
+	local cancel = UITheme.button(UICtx.t("pause_stay"), "GlassButton", "", 46.0)
+	self._confirm_stay = cancel
 	cancel.size_flags_horizontal = W.EXPAND_FILL
 	cancel.pressed:Connect(function()
 		self._confirm:set_visible(false)
@@ -529,7 +551,7 @@ function PauseMenu.new(c: any)
 		self:_center()
 	end)
 	row:add_child(cancel)
-	self._confirm_go = UITheme.button("Leave", "SurrenderButton", "exit", 46.0)
+	self._confirm_go = UITheme.button(UICtx.t("pause_leave_go"), "SurrenderButton", "exit", 46.0)
 	self._confirm_go.size_flags_horizontal = W.EXPAND_FILL
 	self._confirm_go.pressed:Connect(function()
 		self:close()
@@ -543,13 +565,14 @@ function PauseMenu.new(c: any)
 	end)
 	row:add_child(self._confirm_go)
 	self._confirm:add_child(row)
+	self:refresh_locale()
 	return self
 end
 
 function PauseMenu._ask_restart(self)
 	self._confirm_action = "restart"
-	self._confirm_text:set_text("Restart with a fresh world? This match will be lost.")
-	self._confirm_go:set_text("Restart")
+	self._confirm_text:set_text(UICtx.t("pause_confirm_restart"))
+	self._confirm_go:set_text(UICtx.t("pause_restart_go"))
 	self._confirm_go:set_icon("retreat")
 	self._main:set_visible(false)
 	self._confirm:set_visible(true)
@@ -560,11 +583,9 @@ function PauseMenu._ask_new_player(self)
 	local ctx = self.ctx
 	self._confirm_action = "new_player"
 	self._confirm_text:set_text(
-		"Play as a new player again? Your match count and the tutorial start over"
-			.. (if ctx:in_match() then ", and this match ends." else ".")
-			.. " What you own stays."
+		UICtx.t("pause_confirm_new", if ctx:in_match() then UICtx.t("pause_confirm_new_end") else ".")
 	)
-	self._confirm_go:set_text("Replay")
+	self._confirm_go:set_text(UICtx.t("pause_replay_go"))
 	self._confirm_go:set_icon("retreat")
 	self._main:set_visible(false)
 	self._confirm:set_visible(true)
@@ -574,7 +595,7 @@ end
 function PauseMenu._ask_leave(self)
 	local ctx = self.ctx
 	self._confirm_action = "leave"
-	self._confirm_go:set_text("Leave")
+	self._confirm_go:set_text(UICtx.t("pause_leave_go"))
 	self._confirm_go:set_icon("exit")
 	if not ctx:in_match() then
 		self:close()
@@ -585,11 +606,10 @@ function PauseMenu._ask_leave(self)
 	local mp = ctx:mode() == UICtx.MODE_MULTI
 	if o ~= nil and o.alive and ctx.state ~= nil and ctx.state.phase == Defs.PHASE_PLAYING then
 		self._confirm_text:set_text(
-			"Surrender and return to the title screen? "
-				.. (if mp then "Your nation stays on the map without a commander." else "This campaign will end.")
+			UICtx.t("pause_confirm_leave_alive", if mp then UICtx.t("pause_leave_mp") else UICtx.t("pause_leave_solo"))
 		)
 	else
-		self._confirm_text:set_text("Return to the title screen?")
+		self._confirm_text:set_text(UICtx.t("pause_confirm_leave"))
 	end
 	self._main:set_visible(false)
 	self._confirm:set_visible(true)
@@ -625,18 +645,11 @@ function PauseMenu.open(self, labels_on: boolean, page: string?)
 	local mp = ctx:mode() == UICtx.MODE_MULTI
 	local on_title = not ctx:in_match()
 	self._on_title = on_title
-	local diff = { [0] = "Relaxed", "Standard", "Brutal" }
-	local d =
-		math.clamp(tonumber(ctx:setting("difficulty", UICtx.DEFAULT_DIFFICULTY)) or UICtx.DEFAULT_DIFFICULTY, 0, 2)
-	if on_title then
-		self._menu_sub = if ctx:mp_waiting() then "Waiting for the next multiplayer match" else "Main menu"
-	else
-		self._menu_sub = if mp then "Multiplayer match" else string.format("Solo match · %s · paused", diff[d])
-	end
+	self:_refresh_menu_sub()
 	self._restart:set_visible(not mp and not on_title)
 	self._labels:set_visible(not on_title)
 	self._confirm_sw:set_visible(not on_title)
-	self._tips:set_text("Show tips again")
+	self:refresh_locale()
 	self._tips:set_disabled(false)
 	self._new_player:set_visible(ctx.staging == true or ctx:admin())
 	self._next_preview:set_visible(on_title and (ctx.staging == true or ctx:admin()))
@@ -690,11 +703,52 @@ function PauseMenu.show_settings(self)
 	end
 end
 
+function PauseMenu._refresh_menu_sub(self)
+	local ctx = self.ctx
+	local mp = ctx:mode() == UICtx.MODE_MULTI
+	local d =
+		math.clamp(tonumber(ctx:setting("difficulty", UICtx.DEFAULT_DIFFICULTY)) or UICtx.DEFAULT_DIFFICULTY, 0, 2)
+	local d_name = UICtx.t("diff_" .. tostring(d))
+	if self._on_title then
+		self._menu_sub = UICtx.t(if ctx:mp_waiting() then "pause_sub_wait" else "pause_sub_title")
+	elseif mp then
+		self._menu_sub = UICtx.t("pause_sub_mp")
+	elseif ctx.state ~= nil and ctx.state.game_mode == "zombie" then
+		self._menu_sub = UICtx.t("pause_sub_zombie", d_name)
+	else
+		self._menu_sub = UICtx.t("pause_sub_solo", d_name)
+	end
+end
+
+function PauseMenu.refresh_locale(self)
+	self:_refresh_menu_sub()
+	local settings = self._page == "settings"
+	self._title:set_text(UICtx.t(if settings then "pause_settings" else "pause_title"))
+	self._sub:set_text(if settings then UICtx.t("pause_sub_settings") else (self._menu_sub or ""))
+	self._resume:set_text(UICtx.t("pause_resume"))
+	self._help_btn:set_text(UICtx.t("pause_how_to_play"))
+	self._settings_btn:set_text(UICtx.t("pause_settings"))
+	self._done:set_text(UICtx.t("pause_done"))
+	if self._lang_btn ~= nil then
+		self._lang_btn:set_text(UICtx.t("pause_lang"))
+	end
+	self._labels:set_text(UICtx.t("pause_labels"))
+	self._music:set_text(UICtx.t("pause_music"))
+	self._pops:set_text(UICtx.t("pause_pops"))
+	self._confirm_sw:set_text(UICtx.t("pause_confirm_atk"))
+	self._tips:set_text(UICtx.t("pause_tips"))
+	self._new_player:set_text(UICtx.t("pause_new_player"))
+	self._next_preview:set_text(UICtx.t("pause_next_preview"))
+	self._restart:set_text(UICtx.t("pause_restart"))
+	self._leave:set_text(UICtx.t("pause_leave"))
+	if self._confirm_stay ~= nil then
+		self._confirm_stay:set_text(UICtx.t("pause_stay"))
+	end
+end
+
 function PauseMenu._show_page(self, page: string)
 	self._page = page
-	local settings = page == "settings"
-	self._title:set_text(if settings then "SETTINGS" else "GAME MENU")
-	self._sub:set_text(if settings then "Saved for next time" else (self._menu_sub or ""))
+	self:refresh_locale()
 	self._confirm:set_visible(false)
 	self._main:set_visible(true)
 	self._layout_compact = -1
@@ -735,6 +789,7 @@ function PauseMenu._reflow(self, compact: boolean)
 		self._help_btn,
 		self._settings_btn,
 		self._labels,
+		self._lang_btn,
 		self._music,
 		self._pops,
 		self._confirm_sw,
@@ -757,6 +812,7 @@ function PauseMenu._reflow(self, compact: boolean)
 		self._settings_btn,
 		self._restart,
 		self._labels,
+		self._lang_btn,
 		self._music,
 		self._pops,
 		self._confirm_sw,
@@ -777,7 +833,7 @@ function PauseMenu._reflow(self, compact: boolean)
 	self._done:set_min_size(if slim then Vector2.new(120, 38) else Vector2.new(0, if compact then 46.0 else 50.0))
 	self._tips:set_min_size(Vector2.new(0, if slim then 38.0 else 44.0))
 	if slim then
-		for _, sw in ipairs({ self._labels, self._music, self._pops, self._confirm_sw }) do
+		for _, sw in ipairs({ self._lang_btn, self._labels, self._music, self._pops, self._confirm_sw }) do
 			sw:set_min_size(Vector2.new(0, 42.0))
 		end
 		self._head_actions:add_child(self._tips)
@@ -785,16 +841,17 @@ function PauseMenu._reflow(self, compact: boolean)
 		if self._on_title then
 			-- (no labels or orders on the title: the music slider and the pops side by side; Staging's
 			-- "Replay as new player" under them, the game menu's main page being out of reach on the title)
-			a = { self._music, self._new_player }
+			a = { self._lang_btn, self._music, self._new_player }
 			b = { self._pops, self._next_preview }
 		else
-			a = { self._music, self._pops, self._new_player }
+			a = { self._lang_btn, self._music, self._pops, self._new_player }
 			b = { self._labels, self._confirm_sw }
 		end
 	elseif self._page == "settings" then
 		-- (Staging: "Replay as new player" here too: the title's gear only opens this page,
 		-- so before 2026-10-15 the Staging title screen had no way to it)
 		a = {
+			self._lang_btn,
 			self._music,
 			self._pops,
 			self._labels,

@@ -196,7 +196,10 @@ end
 --- by 10-23, its trigger not found): with these kept, nothing on those paths requires any more.
 UICtx.PRIME_CORE = { "Signal", "Defs", "Rules", "NumberFormat", "Ev" }
 UICtx.PRIME_UI = { "UITheme", "Widgets", "UIRules", "FloatText", "Banner", "FillBar" }
-UICtx.PRIME_DATA = { "Arsenal", "Cosmetics", "Staging", "Stars", "Starter", "Tutorial", "Products" }
+UICtx.PRIME_DATA = { "Arsenal", "Cosmetics", "I18n", "Staging", "Stars", "Starter", "Tutorial", "Products" }
+function UICtx.t(key: string, ...: any): string
+	return UICtx.data("I18n").t(key, ...)
+end
 function UICtx.prime()
 	for _, n in UICtx.PRIME_CORE do
 		pcall(core, n)

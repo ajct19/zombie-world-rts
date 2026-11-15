@@ -315,6 +315,10 @@ function UIRoot.setup(self, session: any, world: any, audio: any)
 			end)
 		end
 	end
+	self:_sig(UICtx.data("I18n"), "changed", function()
+		self:_on_lang_changed()
+	end)
+	self:_apply_saved_lang()
 	self._theme = ""
 	self:_request_apply()
 end
@@ -404,18 +408,52 @@ function UIRoot.replay_as_new_player(self)
 	self._tutorial_at = UICtx.msec() + 2500
 end
 
+function UIRoot._apply_saved_lang(self)
+	local saved = self.ctx:setting("lang", "")
+	if saved == "en" or saved == "ru" then
+		UICtx.data("I18n").set(saved)
+	end
+end
+
+function UIRoot._toggle_lang(self)
+	local next_lang = UICtx.data("I18n").toggle()
+	self.ctx:set_setting("lang", next_lang)
+	self.ctx:sfx("click")
+end
+
+function UIRoot._on_lang_changed(self)
+	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over }) do
+		if panel ~= nil and type(panel.refresh_locale) == "function" then
+			panel:refresh_locale()
+		end
+	end
+	if self.title ~= nil then
+		self.title:set_map_name(UIMaps.name_of(UIMaps.valid(self.ctx:setting("map_id", UIMaps.DEFAULT_ID))))
+	end
+	self:_request_relayout()
+end
+
+function UIRoot._solo_opts(self): { [string]: string }
+	local ctx = self.ctx
+	local mode = if ctx:setting("game_mode", "zombie") == "classic" then "classic" else "zombie"
+	local role = if mode == "zombie" and ctx:setting("zombie_role", "survivor") == "infected"
+		then "infected"
+		else "survivor"
+	return { game_mode = mode, zombie_role = role }
+end
+
 --- The player's saved [ui] settings arrived from the server.
 function UIRoot._on_settings_loaded(self)
 	local ctx = self.ctx
 	ctx:reload_settings()
+	self:_apply_saved_lang()
 	self:_check_new_player(false)
 	self.labels_on = ctx:setting("labels", true) ~= false
-	self.title.difficulty =
-		math.clamp(tonumber(ctx:setting("difficulty", UICtx.DEFAULT_DIFFICULTY)) or UICtx.DEFAULT_DIFFICULTY, 0, 2)
-	for i, ch in ipairs(self.title._chips) do
-		ch:set_pressed_no_signal(i - 1 == self.title.difficulty)
+	self.title:sync_solo_settings()
+	self.title:refresh_locale()
+	if self.pause ~= nil then
+		self.pause:refresh_locale()
 	end
-	self.title:_refresh_diff()
 	-- the saved solo map arrives with the settings: Play Solo uses it, so the title must show it
 	self.title:set_map_name(UIMaps.name_of(UIMaps.valid(ctx:setting("map_id", UIMaps.DEFAULT_ID))))
 	ctx:world_call("set_labels_visible", { self.labels_on and self._screen ~= "title" and self._screen ~= "" })
@@ -964,6 +1002,9 @@ function UIRoot._build(self)
 	title.play_solo:Connect(function(d)
 		self:_on_play_solo(d)
 	end)
+	title.lang_toggled:Connect(function()
+		self:_toggle_lang()
+	end)
 	title.play_multi:Connect(function()
 		ctx:session_call("join_multiplayer")
 	end)
@@ -1091,6 +1132,9 @@ function UIRoot._build(self)
 	end)
 	pause.labels_toggled:Connect(function(on)
 		self:_set_labels(on)
+	end)
+	pause.language_toggled:Connect(function()
+		self:_toggle_lang()
 	end)
 	pause.music_toggled:Connect(function(on)
 		ctx:set_music(on)
@@ -1632,7 +1676,7 @@ function UIRoot._on_play_solo(self, difficulty: number)
 	self._solo_msec = UICtx.msec()
 	ctx:set_setting("difficulty", difficulty)
 	ctx:sfx("click")
-	ctx:session_call("start_solo", { difficulty, UIMaps.valid(ctx:setting("map_id", UIMaps.DEFAULT_ID)) })
+	ctx:session_call("start_solo", { difficulty, UIMaps.valid(ctx:setting("map_id", UIMaps.DEFAULT_ID)), self:_solo_opts() })
 end
 
 --- A fresh solo match from inside one: the results screen's "Play again", the game menu's "Restart
@@ -1657,7 +1701,7 @@ function UIRoot._restart_solo(self, difficulty: number)
 	ctx:set_setting("difficulty", difficulty)
 	ctx:sfx("click")
 	self._restart_pending = true
-	ctx:session_call("start_solo", { difficulty, UIMaps.valid(ctx:setting("map_id", UIMaps.DEFAULT_ID)) })
+	ctx:session_call("start_solo", { difficulty, UIMaps.valid(ctx:setting("map_id", UIMaps.DEFAULT_ID)), self:_solo_opts() })
 	self:_update_pause()
 end
 

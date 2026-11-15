@@ -428,11 +428,17 @@ function Session.start_solo(self: any, p_difficulty: number, map_id: string?, op
 	local countdown = if type(opts) == "table" and type(opts.countdown_ticks) == "number"
 		then opts.countdown_ticks
 		else nil
+	local game_mode = if type(opts) == "table" and opts.game_mode == "zombie" then "zombie" else "classic"
+	local zombie_role = if game_mode == "zombie" and type(opts) == "table" and opts.zombie_role == "infected"
+		then "infected"
+		else "survivor"
 	self:_start_local(MODE_SOLO, {
 		seed = self:_rand_seed(),
 		difficulty = self.difficulty,
 		tribes = tribes,
 		solo_countdown_ticks = countdown,
+		game_mode = game_mode,
+		zombie_role = zombie_role,
 		max_humans = 1,
 		time_limit_s = 0,
 		map_id = self.map_id,

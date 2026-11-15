@@ -369,8 +369,16 @@ function TitleScreen.new(c: any)
 	self.open_general = Signal.new()
 	--- (action, user_id?) the party panel (Session.party_action)
 	self.party_action = Signal.new()
+	self.lang_toggled = Signal.new()
 	self.difficulty =
 		math.clamp(tonumber(c:setting("difficulty", UICtx.DEFAULT_DIFFICULTY)) or UICtx.DEFAULT_DIFFICULTY, 0, 2)
+	self.game_mode = if c:setting("game_mode", "zombie") == "classic" then "classic" else "zombie"
+	self.zombie_role = if c:setting("zombie_role", "survivor") == "infected" then "infected" else "survivor"
+	self._chips = {}
+	self._mode_chips = {}
+	self._role_chips = {}
+	self._map_name = "World"
+	self._building_state = false
 	self._dock_compact = -1
 	self._sweep_t = -1.0
 	self._lobby = {}
@@ -389,7 +397,6 @@ function TitleScreen.new(c: any)
 	self._dot_t = 0.0
 	self._tick_sec = -1
 	self._hide_tween = nil
-	self._chips = {}
 	self:set_mouse_filter(W.MOUSE_IGNORE)
 	self:set_anchors_and_offsets_preset(W.PRESET_FULL_RECT)
 	self:_build_backdrop()
@@ -445,6 +452,13 @@ function TitleScreen.new(c: any)
 		self.party_action:Fire(action, uid)
 	end
 	self:add_child(self._party)
+	self._lang_btn = UITheme.button(UICtx.t("lang_code") .. " / " .. UICtx.t("lang_next"), "GlassButton", "", 36.0)
+	self._lang_btn:set_font_size(13)
+	self._lang_btn.pressed:Connect(function()
+		self.lang_toggled:Fire()
+	end)
+	self:add_child(self._lang_btn)
+	self:refresh_locale()
 	--- in a party, and whether this player leads it (only the leader picks a public match)
 	self._in_party = false
 	self._party_leader = true
@@ -565,6 +579,52 @@ function TitleScreen._build_dock(self)
 	self._diff_desc:set_alignment(W.ALIGN_CENTER)
 	self._diff_desc:set_autowrap(true)
 	self._diff_desc:set_min_size(Vector2.new(360, 0))
+
+	local function build_pair(caption_key: string, keys: { { id: string, label: string } }, active_id: string, on_pick: (string) -> ())
+		local row = UITheme.hbox(8)
+		local cap = UITheme.caption(UICtx.t(caption_key))
+		cap.size_flags_vertical = W.SHRINK_CENTER
+		cap:set_min_size(Vector2.new(84, 0))
+		row:add_child(cap)
+		local chips = {}
+		for _, item in ipairs(keys) do
+			local chip = UITheme.button(UICtx.t(item.label), "ChipButton", "", 34.0)
+			chip.toggle_mode = true
+			chip.size_flags_horizontal = W.EXPAND_FILL
+			chip:set_pressed_no_signal(item.id == active_id)
+			chip.pressed:Connect(function()
+				on_pick(item.id)
+			end)
+			table.insert(chips, chip)
+			row:add_child(chip)
+		end
+		return row, cap, chips
+	end
+
+	self._mode_row, self._mode_caption, self._mode_chips = build_pair("title_mode", {
+		{ id = "classic", label = "mode_classic" },
+		{ id = "zombie", label = "mode_zombie" },
+	}, self.game_mode, function(m: string)
+		self.game_mode = m
+		self._mode_chips[1]:set_pressed_no_signal(m == "classic")
+		self._mode_chips[2]:set_pressed_no_signal(m == "zombie")
+		self._role_row:set_visible(m == "zombie")
+		ctx:set_setting("game_mode", m)
+		self:_refresh_diff()
+	end)
+
+	self._role_row, self._role_caption, self._role_chips = build_pair("title_role", {
+		{ id = "survivor", label = "role_survivor" },
+		{ id = "infected", label = "role_infected" },
+	}, self.zombie_role, function(r: string)
+		self.zombie_role = r
+		self._role_chips[1]:set_pressed_no_signal(r == "survivor")
+		self._role_chips[2]:set_pressed_no_signal(r == "infected")
+		ctx:set_setting("zombie_role", r)
+		self:_refresh_diff()
+	end)
+	self._role_row:set_visible(self.game_mode == "zombie")
+
 	self:_refresh_diff()
 	-- desktop: "PUBLIC MATCHES" between two rules, above the lobby cards
 	local sec = UITheme.hbox(10)
@@ -627,7 +687,8 @@ end
 
 --- The solo map's name on the map button.
 function TitleScreen.set_map_name(self, name: string)
-	self._map_btn:set_text("Map:  " .. name)
+	self._map_name = name
+	self._map_btn:set_text(UICtx.t("title_map", name))
 end
 
 --- One public-match card: map thumbnail, title, status line with a dot, and a JOIN pill.
@@ -883,6 +944,12 @@ function TitleScreen.apply_layout(self)
 
 	self:_reflow_dock(compact)
 	self._diff_caption:set_visible(not compact)
+	if self._mode_caption ~= nil then
+		self._mode_caption:set_visible(not compact)
+	end
+	if self._role_caption ~= nil then
+		self._role_caption:set_visible(not compact)
+	end
 	local dock_w = if not compact then 560.0 else math.min(760.0, vp.X - ctx.insets.x - ctx.insets.z - 16.0)
 	self._dock:set_min_size(Vector2.new(dock_w, 0))
 	if compact then
@@ -920,9 +987,11 @@ function TitleScreen.apply_layout(self)
 	self._help:set_min_size(Vector2.new(if compact then 56 else 62, if compact then 56 else 62))
 	self._help:set_text("")
 	self._help.icon_alignment = W.ALIGN_CENTER
-	for _, ch in ipairs(self._chips) do
-		ch:set_min_size(Vector2.new(if compact then 64 else 0, if ctx.touch then 44 else 34))
-		ch:set_font_size(if compact then 12 else 13)
+	for _, grp in ipairs({ self._chips, self._mode_chips, self._role_chips }) do
+		for _, ch in ipairs(grp) do
+			ch:set_min_size(Vector2.new(if compact then 64 else 0, if ctx.touch then 44 else 34))
+			ch:set_font_size(if compact then 12 else 13)
+		end
 	end
 	self._diff_desc:set_font_size(if compact then 11 else 12)
 	self._diff_desc:set_min_size(Vector2.new(if compact then 0 else 360, 0))
@@ -986,6 +1055,13 @@ function TitleScreen._place_crate_button(self, compact: boolean, head_top: numbe
 	local atop = top + (size.Y - asz.Y)
 	a:set_anchors(0, 0, 0, 0)
 	a:set_offsets(aright - asz.X, atop, aright, atop + asz.Y)
+	if self._lang_btn ~= nil then
+		local lsz = Vector2.new(if compact then 62 else 74, if compact then 32 else 36)
+		local lright = aright - asz.X - (if compact then 6.0 else 14.0)
+		local ltop = atop + math.max(0.0, (asz.Y - lsz.Y) * 0.5)
+		self._lang_btn:set_anchors(0, 0, 0, 0)
+		self._lang_btn:set_offsets(lright - lsz.X, ltop, lright, ltop + lsz.Y)
+	end
 	-- the flag shop's button under the pair, right-aligned with the crate button (always there while
 	-- the shop sells: the starter pack's, which comes and goes, goes under it)
 	local gap = if compact then 10.0 else 22.0
@@ -1161,9 +1237,10 @@ function TitleScreen._build_solo_menu(self)
 	local ic = T.icon_rect("play", 18.0, T.AMBER)
 	ic.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(ic)
-	local title = T.label("PLAY SOLO", 17, 800, T.TEXT, 2)
+	local title = T.label(UICtx.t("title_solo_head"), 17, 800, T.TEXT, 2)
 	title.size_flags_horizontal = W.EXPAND_FILL
 	title.size_flags_vertical = W.SHRINK_CENTER
+	self._solo_title = title
 	head:add_child(title)
 	local close = T.button("", "GhostButton", "close", 44.0)
 	close.expand_icon = true
@@ -1175,12 +1252,16 @@ function TitleScreen._build_solo_menu(self)
 	end)
 	head:add_child(close)
 	v:add_child(head)
+	self._mode_row.size_flags_horizontal = W.FILL
+	v:add_child(self._mode_row)
+	self._role_row.size_flags_horizontal = W.FILL
+	v:add_child(self._role_row)
 	self._map_btn.size_flags_horizontal = W.FILL
 	v:add_child(self._map_btn)
 	self._diff_row.size_flags_horizontal = W.FILL
 	v:add_child(self._diff_row)
 	v:add_child(self._diff_desc)
-	local start = T.button("START", "PrimaryButton", "play", 58.0)
+	local start = T.button(UICtx.t("title_start"), "PrimaryButton", "play", 58.0)
 	start:add_theme_constant_override("icon_max_width", 18)
 	start:set_font_size(19)
 	start.pressed:Connect(function()
@@ -1216,15 +1297,75 @@ function TitleScreen.close_solo_menu(self, quiet: boolean?)
 end
 
 function TitleScreen._refresh_diff(self)
-	local txt = TitleScreen.DIFF_BLURB[self.difficulty]
-	local grace = self.ctx:rules_call("human_grace_ticks", { self.difficulty })
-	if type(grace) == "number" then
-		local secs = grace / 10.0
-		if secs > 0.0 then
-			txt ..= "  Nations leave you alone for " .. UITheme.fmt_time(secs) .. "."
+	local txt = UICtx.t("diff_desc_" .. tostring(self.difficulty))
+	if self.game_mode == "zombie" then
+		local role_key = if self.zombie_role == "infected"
+			then "mode_desc_zombie_infected"
+			else "mode_desc_zombie_survivor"
+		txt = UICtx.t(role_key) .. "\n" .. txt
+	else
+		local grace = self.ctx:rules_call("human_grace_ticks", { self.difficulty })
+		if type(grace) == "number" then
+			local secs = grace / 10.0
+			if secs > 0.0 and UICtx.data("I18n").get() == "en" then
+				txt ..= "  Nations leave you alone for " .. UITheme.fmt_time(secs) .. "."
+			end
 		end
 	end
 	self._diff_desc:set_text(txt)
+end
+
+function TitleScreen.refresh_locale(self)
+	if self._lang_btn ~= nil then
+		self._lang_btn:set_text(UICtx.t("lang_code") .. " / " .. UICtx.t("lang_next"))
+	end
+	if self._tag ~= nil then
+		self._tag:set_text(UICtx.t("title_tag"))
+	end
+	if self._solo ~= nil then
+		self._solo:set_text(UICtx.t("title_play_solo"))
+	end
+	if self._solo_title ~= nil then
+		self._solo_title:set_text(UICtx.t("title_solo_head"))
+	end
+	if self._mode_caption ~= nil then
+		self._mode_caption:set_text(UICtx.t("title_mode"))
+		self._mode_chips[1]:set_text(UICtx.t("mode_classic"))
+		self._mode_chips[2]:set_text(UICtx.t("mode_zombie"))
+	end
+	if self._role_caption ~= nil then
+		self._role_caption:set_text(UICtx.t("title_role"))
+		self._role_chips[1]:set_text(UICtx.t("role_survivor"))
+		self._role_chips[2]:set_text(UICtx.t("role_infected"))
+	end
+	if self._diff_caption ~= nil then
+		self._diff_caption:set_text(UICtx.t("title_diff"))
+	end
+	for i, ch in ipairs(self._chips) do
+		ch:set_text(UICtx.t("diff_" .. tostring(i - 1)))
+	end
+	self._map_btn:set_text(UICtx.t("title_map", self._map_name or "World"))
+	if self._start ~= nil then
+		self._start:set_text(UICtx.t(if self._building_state then "title_deploying" else "title_start"))
+	end
+	self:_refresh_diff()
+end
+
+function TitleScreen.sync_solo_settings(self)
+	local c = self.ctx
+	self.difficulty =
+		math.clamp(tonumber(c:setting("difficulty", UICtx.DEFAULT_DIFFICULTY)) or UICtx.DEFAULT_DIFFICULTY, 0, 2)
+	self.game_mode = if c:setting("game_mode", "zombie") == "classic" then "classic" else "zombie"
+	self.zombie_role = if c:setting("zombie_role", "survivor") == "infected" then "infected" else "survivor"
+	for i, ch in ipairs(self._chips) do
+		ch:set_pressed_no_signal(i - 1 == self.difficulty)
+	end
+	self._mode_chips[1]:set_pressed_no_signal(self.game_mode == "classic")
+	self._mode_chips[2]:set_pressed_no_signal(self.game_mode == "zombie")
+	self._role_chips[1]:set_pressed_no_signal(self.zombie_role == "survivor")
+	self._role_chips[2]:set_pressed_no_signal(self.zombie_role == "infected")
+	self._role_row:set_visible(self.game_mode == "zombie")
+	self:_refresh_diff()
 end
 
 function TitleScreen._size_word(self, px: number)
@@ -1284,10 +1425,13 @@ end
 --- Play Solo was pressed: the new world is being built in the background.
 function TitleScreen.set_building(self, on: boolean)
 	self._solo:set_disabled(on)
+	self._building_state = on
 	self._start:set_disabled(on)
-	self._start:set_text(if on then "DEPLOYING…" else "START")
-	for _, ch in ipairs(self._chips) do
-		ch:set_disabled(on)
+	self._start:set_text(UICtx.t(if on then "title_deploying" else "title_start"))
+	for _, grp in ipairs({ self._chips, self._mode_chips, self._role_chips }) do
+		for _, ch in ipairs(grp) do
+			ch:set_disabled(on)
+		end
 	end
 end
 
