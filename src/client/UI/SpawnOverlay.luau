@@ -182,6 +182,11 @@ function SpawnOverlay.on_phase(self, ticks_left: number)
 	self:refresh()
 end
 
+function SpawnOverlay.refresh_locale(self)
+	self:refresh()
+	self:apply_layout()
+end
+
 function SpawnOverlay.refresh(self)
 	local ctx = self.ctx
 	local s = ctx.state
@@ -190,7 +195,6 @@ function SpawnOverlay.refresh(self)
 	end
 	local o = ctx:my()
 	local placed = o ~= nil and o.spawned
-	local solo = ctx:mode() == UICtx.MODE_SOLO
 	local left = -1.0
 	if self._end_tick > 0.0 then
 		left = math.max(0.0, (self._end_tick - ctx:render_tick()) / Defs.TICK_RATE)
@@ -208,27 +212,26 @@ function SpawnOverlay.refresh(self)
 		end
 		self._last_sec = sec
 	end
-	local late = s.phase == Defs.PHASE_PLAYING
-	local verb = if ctx.touch then "Tap" else "Click"
+	local I18n = UICtx.data("I18n")
+	local is_zombie = s.game_mode == "zombie"
+	local is_inf = is_zombie
+		and (s.zombie_role == "infected" or (o ~= nil and type(s.is_infected) == "function" and s:is_infected(o.id)))
+	local sub_mode = if is_inf
+		then I18n.t("spawn_infected_sub")
+		elseif is_zombie then I18n.t("spawn_zombie_sub")
+		else I18n.t("spawn_classic_sub")
 	if ctx:me() == 0 then
-		self._title:set_text("COMMANDERS ARE DEPLOYING")
-		self._sub:set_text("You are spectating this match.")
-	elseif late and not placed then
-		self._title:set_text("DROP INTO THE WAR")
-		self._sub:set_text(verb .. " any unclaimed land to deploy your capital.")
-	elseif placed and solo and left >= 0.0 then
-		self._title:set_text(string.format("DEPLOYING IN %d", math.ceil(left)))
-		self._sub:set_text(verb .. " elsewhere to relocate your capital.")
+		self._title:set_text(I18n.t("spawn_waiting"))
+		self._sub:set_text(if is_zombie then sub_mode else "You are spectating this match.")
+	elseif placed and left >= 0.0 then
+		self._title:set_text(I18n.t("spawn_wait", tostring(math.ceil(left))))
+		self._sub:set_text(sub_mode)
 	elseif placed then
 		self._title:set_text("CAPITAL PLACED")
-		self._sub:set_text(verb .. " elsewhere to relocate until the countdown ends.")
+		self._sub:set_text(sub_mode)
 	else
-		self._title:set_text("CHOOSE YOUR STARTING LOCATION")
-		self._sub:set_text(
-			if not ctx.touch
-				then "Click any unclaimed land to place your capital."
-				else "Tap any unclaimed land to place your capital."
-		)
+		self._title:set_text(I18n.t("spawn_ready"))
+		self._sub:set_text(sub_mode)
 	end
 	self:_refresh_players()
 	self.panel:reset_size()

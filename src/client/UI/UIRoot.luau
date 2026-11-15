@@ -422,7 +422,7 @@ function UIRoot._toggle_lang(self)
 end
 
 function UIRoot._on_lang_changed(self)
-	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over }) do
+	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over, self.board }) do
 		if panel ~= nil and type(panel.refresh_locale) == "function" then
 			panel:refresh_locale()
 		end
@@ -1872,6 +1872,40 @@ function UIRoot._bind_state(self, s: any)
 	end)
 	c("owner_spawned", function(id, tile)
 		self:_on_owner_spawned(id, tile)
+	end)
+	c("bio_event", function(ev_kind, owner_id)
+		if not ctx:in_match() then
+			return
+		end
+		local I18n = UICtx.data("I18n")
+		if ev_kind == "outbreak" then
+			self.alert:flash_biohazard(I18n.t("alert_biohazard"), I18n.t("alert_biohazard_sub"), "bio", 5.0)
+			self:relayout_alert()
+			self.feed:toast(Defs.MSG_ALERT, I18n.t("alert_biohazard"), "skull")
+			ctx:sfx("betrayal")
+			self.top:refresh()
+			self.board:mark_dirty()
+		elseif ev_kind == "mutation" then
+			local nm = if ctx.state ~= nil then ctx.state:owner_name(owner_id) else ""
+			self.alert:flash_biohazard(I18n.t("alert_mutated"), I18n.t("alert_mutated_sub", nm), "bio", 4.2)
+			self:relayout_alert()
+			self.feed:toast(Defs.MSG_ALERT, I18n.t("alert_mutated_sub", nm), "skull")
+			self.top:refresh()
+			self.board:mark_dirty()
+		end
+	end)
+	c("reinforced", function(id, _added, _ready_at)
+		if not ctx:in_match() then
+			return
+		end
+		local st = ctx.state
+		if id == ctx:me() and st ~= nil and st.game_mode == "zombie" and type(st.is_infected) == "function" and not st:is_infected(id) then
+			local I18n = UICtx.data("I18n")
+			self.alert:flash_biohazard(I18n.t("alert_vaccine"), I18n.t("alert_vaccine_sub"), "vaccine", 3.5)
+			self:relayout_alert()
+			self.top:refresh()
+			bar:refresh_buttons()
+		end
 	end)
 	-- cheap now: the tracker forgets the previous match (its events stop), the rule counts are
 	-- current; the full border scan waits for _bind_refresh

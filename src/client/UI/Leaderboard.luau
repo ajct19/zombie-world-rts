@@ -22,6 +22,9 @@ local GlassPanel = require("./GlassPanel")
 local Cosmetics: any = if typeof(game) == "Instance"
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Cosmetics)
 	else (require :: any)("../../shared/Data/Cosmetics")
+local I18n: any = if typeof(game) == "Instance"
+	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.I18n)
+	else (require :: any)("../../shared/Data/I18n")
 local Signal = UITheme.core("Signal")
 
 local Leaderboard = W.class(W.Control)
@@ -173,7 +176,8 @@ function Row.set_row(self, o: any, r: number)
 			self.flag:set_visible(false)
 		end
 	end
-	self.name_l:set_text(o.name)
+	local is_z = type(s.is_infected) == "function" and s:is_infected(o.id)
+	self.name_l:set_text(if is_z then string.format("[%s] %s", I18n.t("top_horde_tag"), o.name) else o.name)
 	self.land:set_text(T.fmt_pct(s:land_share(o.id)))
 	self.troops:set_text(T.fmt_troops(o.troops))
 	-- Threat context: a neighbour with over 3x our army reads red.
@@ -199,6 +203,8 @@ function Row.set_row(self, o: any, r: number)
 	local nc = T.TEXT
 	if self.is_me then
 		nc = T.AMBER_HI
+	elseif is_z then
+		nc = Color3.fromRGB(92, 255, 84)
 	elseif traitor then
 		nc = Color3.new(1.0, 0.7, 0.72)
 	end
@@ -645,6 +651,11 @@ function Leaderboard._refresh_teams(self)
 	end
 	local sep = T.hdivider()
 	box:add_child(sep)
+end
+
+function Leaderboard.refresh_locale(self)
+	self:mark_dirty()
+	self:refresh()
 end
 
 --- Per frame (GDScript _process).

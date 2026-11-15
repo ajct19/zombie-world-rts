@@ -1966,6 +1966,109 @@ function Diag.start(Main: any)
 			-- polish-fixer probe (round-2 polish items)
 			local P = script.Parent:FindFirstChild("PolishFixProbe")
 			return if P then (require :: any)(P).run(Main, words) else "no probe"
+		elseif op == "zombie" then
+			local I18n = require(game:GetService("ReplicatedStorage").Airfront.Data.I18n) :: any
+			local W = require(script.Parent.Parent.UI.Widgets) :: any
+			local HttpService = game:GetService("HttpService")
+			local sub = words[2] or "state"
+			if sub == "prep" then
+				local ui = Main.ui
+				if ui and ui.tutorial then
+					ui.tutorial:stop("left")
+				end
+				if ui and ui.ctx then
+					ui.ctx:set_setting("tutorial", "done")
+				end
+				if ui and ui.starter and ui.starter.is_open then
+					ui.starter:close()
+				end
+				if words[3] == "ru" or words[3] == "en" then
+					I18n.set(words[3])
+				end
+				return "prep " .. tostring(I18n.get())
+			elseif sub == "lang" then
+				I18n.set(if words[3] == "ru" then "ru" else "en")
+				return "lang " .. tostring(I18n.get())
+			elseif sub == "start" then
+				local role = if words[3] == "infected" then "infected" else "survivor"
+				local tribes = tonumber(words[4]) or 60
+				session:start_solo(1, "world", {
+					game_mode = "zombie",
+					zombie_role = role,
+					countdown_ticks = 5,
+					tribes = tribes,
+				})
+				return "started " .. role
+			elseif sub == "reinforce" then
+				local ui = Main.ui
+				if ui and ui.ctx then
+					ui.ctx:send({ type = "reinforce" })
+				else
+					session:send_intent({ type = "reinforce" })
+				end
+				return "reinforce sent"
+			elseif sub == "board" then
+				if Main.ui and Main.ui.board then
+					Main.ui.board:set_open(words[3] ~= "0")
+				end
+				return "board " .. tostring(Main.ui and Main.ui.board and Main.ui.board.expanded)
+			elseif sub == "focus_id" then
+				local oid = tonumber(words[3]) or (st and st.local_owner or 0)
+				local tile = if st ~= nil then st:label_tile(oid) else -1
+				if tile < 0 and st ~= nil and st.owners[oid] ~= nil then
+					tile = st.owners[oid].spawn_tile or -1
+				end
+				if Main.world and Main.world.rig and tile >= 0 then
+					local rig = Main.world.rig
+					local lo, hi = rig:min_scale(), rig:max_scale()
+					local z = tonumber(words[4]) or 0.55
+					rig:focus_tile(tile, rig:clamp_scale(lo + (hi - lo) * z), 0.05)
+				end
+				return "focused " .. tostring(oid) .. " tile=" .. tostring(tile)
+			else
+				local best_zid = 0
+				local best_ztiles = -1
+				if st ~= nil then
+					for id, o in st.owners do
+						if o.alive and o.tiles > best_ztiles and st:is_infected(id) then
+							best_zid = id
+							best_ztiles = o.tiles
+						end
+					end
+				end
+				local surf = Main.world and Main.world.surface
+				local ui = Main.ui
+				local me = if st ~= nil then st.local_owner else 0
+				return HttpService:JSONEncode({
+					mode = session.mode,
+					building = session:is_building(),
+					phase = if st ~= nil then st.phase else -1,
+					tick = if st ~= nil then st.tick else -1,
+					game_mode = if st ~= nil then st.game_mode else "",
+					zombie_role = if st ~= nil then st.zombie_role else "",
+					me = me,
+					me_inf = (st ~= nil and me ~= 0 and st:is_infected(me)) or false,
+					me_troops = (st ~= nil and me ~= 0 and st.owners[me] and st.owners[me].troops) or 0,
+					me_tiles = (st ~= nil and me ~= 0 and st.owners[me] and st.owners[me].tiles) or 0,
+					vaccine_on = (st ~= nil and me ~= 0 and st:vaccine_active(me)) or false,
+					outbreak_spawned = (st ~= nil and st.outbreak_spawned) or false,
+					inf_tiles = (st ~= nil and st:infected_tiles()) or 0,
+					zid = best_zid,
+					zid_tiles = best_ztiles,
+					zid_skin = (best_zid > 0 and surf ~= nil and surf._skins ~= nil and surf._skins[best_zid] ~= nil and surf._skins[best_zid].zombie == true)
+						or false,
+					me_skin = (me > 0 and surf ~= nil and surf._skins ~= nil and surf._skins[me] ~= nil and surf._skins[me].zombie == true)
+						or false,
+					alert_vis = (ui ~= nil and ui.alert ~= nil and ui.alert.visible) or false,
+					alert_title = (ui ~= nil and ui.alert ~= nil and ui.alert._title ~= nil and ui.alert._title.text)
+						or "",
+					top_goal = (ui ~= nil and ui.top ~= nil and ui.top._goal ~= nil and ui.top._goal.text) or "",
+					top_grace = (ui ~= nil and ui.top ~= nil and ui.top._grace ~= nil and ui.top._grace.text) or "",
+					board_open = (ui ~= nil and ui.board ~= nil and ui.board.expanded) or false,
+					lang = I18n.get(),
+					ui_errors = W.errors.caught,
+				})
+			end
 		else
 			return "unknown " .. tostring(op)
 		end

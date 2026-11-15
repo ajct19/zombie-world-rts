@@ -300,7 +300,7 @@ function GameOver.new(c: any)
 	end)
 	self._stars_btn = sb
 	self._buttons:add_child(sb)
-	self._again = UITheme.button("PLAY AGAIN", "PrimaryButton", "play", 52.0)
+	self._again = UITheme.button(UICtx.data("I18n").t("over_play_again"), "PrimaryButton", "play", 52.0)
 	self._again:set_min_size(Vector2.new(200, 52))
 	self._again.pressed:Connect(function()
 		self.play_again:Fire()
@@ -313,7 +313,7 @@ function GameOver.new(c: any)
 		self.spectate:Fire()
 	end)
 	self._buttons:add_child(self._spec)
-	self._home = UITheme.button("Return to title", "GlassButton", "exit", 52.0)
+	self._home = UITheme.button(UICtx.data("I18n").t("over_main_menu"), "GlassButton", "exit", 52.0)
 	self._home:set_min_size(Vector2.new(200, 52))
 	self._home.pressed:Connect(function()
 		self.to_title:Fire()
@@ -502,7 +502,7 @@ function GameOver.open(self, kind: string, winner: number, killer: number, stats
 	-- Winner pill: a real winner gets the crown; otherwise it reads "Current leader".
 	local real_winner = (kind == "victory" or kind == "defeat" or kind == "result")
 		and winner ~= 0
-		and (rsn == Defs.OVER_DOMINATION or rsn == Defs.OVER_TIME)
+		and (rsn == Defs.OVER_DOMINATION or rsn == Defs.OVER_TIME or rsn == Defs.OVER_PLAGUE_PURGED)
 	local pill_id = if real_winner then winner else self:_leader_id()
 	-- A domination winner's share is the victory metric (land outside fallout), like the headline.
 	self._pill_domination = real_winner and rsn == Defs.OVER_DOMINATION and self._dominated
@@ -829,9 +829,20 @@ function GameOver._leader_id(self): number
 end
 
 --- Headline copy for every way a match can end, so the screen never claims something untrue.
+function GameOver.refresh_locale(self)
+	local I18n = UICtx.data("I18n")
+	if self._again ~= nil then
+		self._again:set_text(I18n.t("over_play_again"))
+	end
+	if self._home ~= nil then
+		self._home:set_text(I18n.t("over_main_menu"))
+	end
+end
+
 function GameOver._copy(self, kind: string, winner: number, killer: number, reason: number, secs: number): any
 	local ctx = self.ctx
 	local s = ctx.state
+	local I18n = UICtx.data("I18n")
 	local R = UICtx.core("Rules")
 	local wname = if s ~= nil and winner ~= 0 then s:owner_name(winner) else "Nobody"
 	local wshare = if s ~= nil and winner ~= 0 then UITheme.fmt_pct(s:land_share(winner)) else "0%"
@@ -847,8 +858,45 @@ function GameOver._copy(self, kind: string, winner: number, killer: number, reas
 	local red_top = Color3.new(1.0, 0.85, 0.85)
 	local cyan_top = Color3.new(0.92, 0.97, 1.0)
 	local c = { kicker = "MATCH COMPLETE", title = "GAME OVER", sub = "", top = cyan_top, bottom = UITheme.CYAN }
-	-- a team game: the team won, together
 	local wt = if s ~= nil then tonumber(s.winner_team) or 0 else 0
+	if s ~= nil and s.game_mode == "zombie" and kind ~= "eliminated" then
+		local me = ctx:me()
+		local me_inf = me ~= 0 and type(s.is_infected) == "function" and s:is_infected(me)
+		local bio_pct = string.format("%.0f", ctx:team_share(Defs.TEAM_ZOMBIE) * 100)
+		if reason == Defs.OVER_PLAGUE_PURGED then
+			if kind == "victory" then
+				c.title = I18n.t("over_win_purge")
+				c.sub = I18n.t("over_win_purge_sub")
+				c.top = gold_top
+				c.bottom = UITheme.GOLD
+			else
+				c.title = I18n.t("over_loss_purged")
+				c.sub = I18n.t("over_loss_purged_sub")
+				c.top = red_top
+				c.bottom = UITheme.RED
+			end
+			return c
+		elseif wt == Defs.TEAM_ZOMBIE then
+			if kind == "victory" and me_inf then
+				c.title = I18n.t("over_win_infected_player")
+				c.sub = I18n.t("over_win_infected_player_sub")
+				c.top = Color3.fromRGB(190, 255, 175)
+				c.bottom = Color3.fromRGB(57, 255, 20)
+			elseif kind == "defeat" then
+				c.title = I18n.t("over_loss_horde")
+				c.sub = I18n.t("over_loss_horde_sub", bio_pct)
+				c.top = red_top
+				c.bottom = UITheme.RED
+			else
+				c.title = I18n.t("over_win_horde")
+				c.sub = I18n.t("over_win_horde_sub")
+				c.top = Color3.fromRGB(190, 255, 175)
+				c.bottom = Color3.fromRGB(57, 255, 20)
+			end
+			return c
+		end
+	end
+	-- a team game: the team won, together
 	if kind ~= "eliminated" and wt ~= 0 and ctx.team_share ~= nil then
 		local tshare = UITheme.fmt_pct(ctx:team_share(wt))
 		local tname = ctx:team_label(wt)

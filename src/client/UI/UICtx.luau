@@ -1358,6 +1358,9 @@ end
 
 --- A team game: the team's name as players read it ("Red team", "Team 3", "Humans").
 function UICtx.team_label(self: any, t: number): string
+	if t == Defs.TEAM_ZOMBIE then
+		return UICtx.data("I18n").t("team_zombie")
+	end
 	local s = self.state
 	local n = if s ~= nil and type(s.team_name) == "function" then s:team_name(t) else ""
 	if n == "" then
@@ -1378,6 +1381,9 @@ function UICtx.relation(self: any, id: number): string
 	if id == self:me() then
 		return "You"
 	end
+	if type(s.is_infected) == "function" and s:is_infected(id) and not s:is_infected(self:me()) then
+		return UICtx.data("I18n").t("top_horde_tag")
+	end
 	if type(s.same_team) == "function" and s:same_team(self:me(), id) then
 		return "Teammate"
 	end
@@ -1397,6 +1403,8 @@ function UICtx.relation_color(_self: any, rel: string): Color3
 	local T = UICtx.mod("UITheme")
 	if rel == "You" then
 		return T.AMBER
+	elseif rel == "HORDE" or rel == "ОРДА" then
+		return Color3.fromRGB(57, 255, 20)
 	elseif rel == "Ally" or rel == "Teammate" then
 		return T.GREEN
 	elseif rel == "Traitor" then
@@ -1426,6 +1434,8 @@ function UICtx.kind_title(_self: any, kind: number): string
 		return "Tribe"
 	elseif kind == Defs.KIND_HUMAN then
 		return "Commander"
+	elseif kind == Defs.KIND_ZOMBIE then
+		return UICtx.data("I18n").t("kind_zombie")
 	end
 	return "Nation"
 end

@@ -12,6 +12,7 @@ local UITheme = require("./UITheme")
 local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
 local FillBar = require("./FillBar")
+local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
 
 local TopStatus = W.class(W.Control)
@@ -69,6 +70,7 @@ function TopStatus.new(c: any)
 	self._grace_row = T.hbox(4)
 	local gic = T.icon_rect("defense", 11.0, T.GREEN)
 	gic.size_flags_vertical = W.SHRINK_CENTER
+	self._grace_ic = gic
 	self._grace_row:add_child(gic)
 	self._grace = T.label("", 11, 700, T.GREEN, 1)
 	self._grace.rolling = true
@@ -126,6 +128,7 @@ function TopStatus._build_mini(self)
 	local gh = T.hbox(3)
 	local gi = T.icon_rect("defense", 11.0, T.GREEN)
 	gi.size_flags_vertical = W.SHRINK_CENTER
+	self._m_grace_ic = gi
 	gh:add_child(gi)
 	self._m_grace_l = T.label("", 12, 700, T.GREEN)
 	self._m_grace_l.rolling = true
@@ -243,8 +246,12 @@ function TopStatus._fix_widths(self)
 	local small = math.max(11, T.min_font_size)
 	local cs = if ctx.compact then 16 else 20
 	local ws = math.max(12, T.min_font_size)
-	local w_block =
-		math.max(T.text_width("SPAWN PHASE", small, 700) + 12.0, T.text_width("PROTECTED 8:88", small, 700) + 20.0)
+	local w_block = math.max(
+		T.text_width("SPAWN PHASE", small, 700) + 12.0,
+		T.text_width("PROTECTED 8:88", small, 700) + 20.0,
+		T.text_width("ВСПЫШКА 8:88", small, 700) + 22.0,
+		T.text_width("ВАКЦИНА 88с", small, 700) + 22.0
+	)
 	T.fix_width(self._phase, w_block, W.ALIGN_LEFT, false)
 	T.fix_width(self._grace, w_block - 16.0)
 	local w_clock = T.text_width("8:88:88", cs, 700) + 2.0
@@ -303,10 +310,17 @@ function TopStatus.on_bind(self)
 	self:on_phase(s.phase, s.phase_ticks_left)
 end
 
+function TopStatus.refresh_locale(self)
+	self:_fix_widths()
+	self:refresh()
+end
+
 function TopStatus.refresh(self)
 	local ctx = self.ctx
 	local T = UITheme
 	local Defs = T.core("Defs")
+	local Rules = T.core("Rules")
+	local I18n = UICtx.data("I18n")
 	local s = ctx.state
 	if s == nil then
 		return
@@ -360,12 +374,28 @@ function TopStatus.refresh(self)
 	-- (the leader alone, from one pass: not the whole ranking sorted, 2026-10-27)
 	local leader = ctx:leader()
 	local me = ctx:me()
+	local is_zombie = s.game_mode == "zombie"
+	local me_inf = is_zombie and me ~= 0 and type(s.is_infected) == "function" and s:is_infected(me)
+	if is_zombie and me_inf then
+		self._goal:set_text(I18n.t("top_goal_infected", math.floor((Rules.ZOMBIE_WIN_SHARE or 0.8) * 100 + 0.5)))
+		T.set_font_color(self._goal, Color3.fromRGB(92, 255, 84))
+		self._bar.goal = Rules.ZOMBIE_WIN_SHARE or 0.8
+	elseif is_zombie then
+		self._goal:set_text(I18n.t("top_goal_zombie", math.floor(Rules.WIN_SHARE * 100 + 0.5)))
+		T.set_font_color(self._goal, T.GOLD)
+		self._bar.goal = Rules.WIN_SHARE
+	else
+		self._goal:set_text(I18n.t("top_goal", math.floor(Rules.WIN_SHARE * 100 + 0.5)))
+		T.set_font_color(self._goal, T.GOLD)
+		self._bar.goal = Rules.WIN_SHARE
+	end
 	local my_share = if me ~= 0 then s:land_share(me) else 0.0
 	local mo = ctx:my()
-	local mcol = if mo ~= nil then T.owner_ui_color(mo.color) else T.AMBER
+	local mcol = if me_inf then Color3.fromRGB(57, 255, 20) elseif mo ~= nil then T.owner_ui_color(mo.color) else T.AMBER
+	local you_lbl = I18n.t("top_you")
 	self._you_sw:set_visible(me ~= 0)
 	T.set_swatch_color(self._you_sw, mcol)
-	self._you:set_text(if me ~= 0 then ("You " .. T.fmt_pct(my_share)) else "Spectating")
+	self._you:set_text(if me ~= 0 then (you_lbl .. " " .. T.fmt_pct(my_share)) else "Spectating")
 	if ctx.compact and me ~= 0 and self.rank_provider ~= nil then
 		local rk = tonumber(self.rank_provider()) or 0
 		if rk > 0 then
@@ -373,13 +403,22 @@ function TopStatus.refresh(self)
 		end
 	end
 	self._bar.fill_color = mcol
-	self._bar:set_target(if me ~= 0 then ctx:win_share(me) else 0.0)
+	self._bar:set_target(if me == 0 then 0.0 elseif me_inf then ctx:team_share(Defs.TEAM_ZOMBIE) else ctx:win_share(me))
 	table.clear(self._bar.markers)
+	if is_zombie and not me_inf and type(s.infected_tiles) == "function" and s:infected_tiles() > 0 then
+		table.insert(self._bar.markers, { v = ctx:team_share(Defs.TEAM_ZOMBIE), color = Color3.fromRGB(57, 255, 20) })
+	end
 	if leader ~= nil then
 		local ls = s:land_share(leader.id)
 		self._lead_box:set_visible(leader.id ~= me)
 		T.set_swatch_color(self._lead_sw, leader.color)
-		self._lead:set_text(if ctx.compact then T.fmt_pct(ls) else string.format("%s %s", leader.name, T.fmt_pct(ls)))
+		if ctx.compact then
+			self._lead:set_text(T.fmt_pct(ls))
+		else
+			local l_inf = is_zombie and type(s.is_infected) == "function" and s:is_infected(leader.id)
+			local lname = if l_inf then string.format("[%s] %s", I18n.t("top_horde_tag"), leader.name) else leader.name
+			self._lead:set_text(string.format("%s %s", lname, T.fmt_pct(ls)))
+		end
 		if leader.id ~= me then
 			table.insert(self._bar.markers, { v = ctx:win_share(leader.id), color = T.owner_ui_color(leader.color) })
 		else
@@ -403,6 +442,7 @@ function TopStatus.refresh(self)
 		T.set_swatch_color(self._m_sw, mcol)
 		self._m_sw:set_visible(me ~= 0)
 		local yt = string.gsub(self._you.text, "You lead · ", "#1 · ")
+		yt = string.gsub(yt, you_lbl .. " ", "")
 		yt = string.gsub(yt, "You ", "")
 		self._m_you:set_text(yt)
 		-- While protected, the shield countdown takes the clock's place (the match is young).
@@ -466,12 +506,65 @@ end
 --- Early peace: nations will not declare war on a commander during the grace window
 --- (Rules.human_grace_ticks(difficulty), counted from the start of play).
 function TopStatus._refresh_grace(self)
+	local ctx = self.ctx
+	local s = ctx.state
+	local T = UITheme
+	local Defs = T.core("Defs")
+	local Rules = T.core("Rules")
+	local I18n = UICtx.data("I18n")
+	if s ~= nil and s.game_mode == "zombie" and s.phase == Defs.PHASE_PLAYING then
+		local me = ctx:me()
+		local me_inf = me ~= 0 and type(s.is_infected) == "function" and s:is_infected(me)
+		local now = ctx:render_tick()
+		local tr = Defs.TICK_RATE
+		if me ~= 0 and not me_inf and type(s.vaccine_active) == "function" and s:vaccine_active(me) then
+			local mo = s.owners[me]
+			local rem = math.max(1, math.ceil(((if mo ~= nil then (mo.immune_until or s.tick) else s.tick) - now) / tr))
+			local col = Color3.fromRGB(56, 189, 248)
+			self._grace_row:set_visible(true)
+			self._phase:set_visible(false)
+			if self._grace_ic ~= nil then
+				self._grace_ic:set_color(col)
+			end
+			T.set_font_color(self._grace, col)
+			self._grace:set_text(I18n.t("top_vaccine_on", rem))
+			return
+		elseif not s.outbreak_spawned and (s.playing_since or -1) >= 0 then
+			local out_s = math.max(0, math.ceil(((s.playing_since or 0) + (Rules.ZOMBIE_OUTBREAK_DELAY_TICKS or 120) - now) / tr))
+			local col = Color3.fromRGB(57, 255, 20)
+			self._grace_row:set_visible(true)
+			self._phase:set_visible(false)
+			if self._grace_ic ~= nil then
+				self._grace_ic:set_color(col)
+			end
+			T.set_font_color(self._grace, col)
+			self._grace:set_text(I18n.t("top_outbreak_in", T.fmt_time(out_s)))
+			return
+		elseif s.outbreak_spawned then
+			local inf_t = if type(s.infected_tiles) == "function" then s:infected_tiles() else (tonumber(s.infected_tiles) or 0)
+			local contest = math.max((s.map.contestable_count or 1) - (tonumber(s.fallout_count) or 0), 1)
+			local pct = math.floor(inf_t / contest * 100 + 0.5)
+			local col = Color3.fromRGB(57, 255, 20)
+			self._grace_row:set_visible(true)
+			self._phase:set_visible(false)
+			if self._grace_ic ~= nil then
+				self._grace_ic:set_color(col)
+			end
+			T.set_font_color(self._grace, col)
+			self._grace:set_text(I18n.t("top_bio_threat", pct))
+			return
+		end
+	end
+	if self._grace_ic ~= nil then
+		self._grace_ic:set_color(T.GREEN)
+	end
+	T.set_font_color(self._grace, T.GREEN)
 	local left = self:grace_left()
 	local show = left > 0
 	self._grace_row:set_visible(show)
 	self._phase:set_visible(not show)
 	if show then
-		self._grace:set_text("PROTECTED")
+		self._grace:set_text(I18n.t("top_grace", T.fmt_time(math.ceil(left))))
 	end
 end
 

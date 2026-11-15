@@ -850,13 +850,21 @@ function UIAdvisor.on_game_over(self: any, winner: number, reason: number)
 	if not dead then
 		st.duration_s = ctx:match_seconds()
 	end
+	local s = ctx.state
 	local kind = "result"
 	if me ~= 0 and not dead then
 		kind = if winner == me then "victory" else "defeat"
 	end
+	if reason == Defs.OVER_PLAGUE_PURGED and me ~= 0 then
+		local is_inf = s ~= nil and type(s.is_infected) == "function" and s:is_infected(me)
+		if is_inf then
+			kind = "defeat"
+		elseif not dead then
+			kind = "victory"
+		end
+	end
 	-- a team game: the team wins together (a fallen member's team too; every member who spawned is
 	-- credited)
-	local s = ctx.state
 	local wt = if s ~= nil then tonumber(s.winner_team) or 0 else 0
 	if wt ~= 0 and me ~= 0 and s:team_of(me) ~= 0 then
 		kind = if s:team_of(me) == wt then "victory" else (if dead then "result" else "defeat")

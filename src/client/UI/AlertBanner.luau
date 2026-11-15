@@ -24,6 +24,9 @@ function AlertBanner.new(c: any)
 	self._t = 0.0
 	--- Seconds left of the green "intercepted" state (0 = normal).
 	self._green = 0.0
+	--- Seconds left of a biohazard / vaccine alert banner (0 = none).
+	self._bio = 0.0
+	self._bio_tone = "bio"
 	--- The incoming set changed since the text was written (update() writes it).
 	self._stale = false
 	self:set_mouse_filter(W.MOUSE_IGNORE)
@@ -93,12 +96,44 @@ end
 function AlertBanner.clear(self)
 	table.clear(self._incoming)
 	self._green = 0.0
+	self._bio = 0.0
 	self:set_visible(false)
 	self:_set_red()
 end
 
 function AlertBanner.is_green(self): boolean
 	return self._green > 0
+end
+
+local function bio_palette(T: any, tone: string): (Color3, Color3, Color3, string)
+	if tone == "vaccine" then
+		return Color3.fromRGB(56, 189, 248), Color3.fromRGB(186, 238, 255), T.rgba(0.03, 0.16, 0.26, 0.92), "defense"
+	end
+	return Color3.fromRGB(57, 255, 20), Color3.fromRGB(165, 255, 140), T.rgba(0.04, 0.20, 0.05, 0.93), "skull"
+end
+
+function AlertBanner.flash_biohazard(self, title: string, detail: string, tone: string?, secs: number?)
+	if next(self._incoming) ~= nil then
+		return
+	end
+	local T = UITheme
+	local t = tone or "bio"
+	self._bio = secs or 4.2
+	self._bio_tone = t
+	self._green = 0.0
+	self:set_visible(true)
+	self:set_modulate_a(1.0)
+	local col, tcol, tint, icon = bio_palette(T, t)
+	self._title:set_text(title)
+	self._title:set_color(tcol)
+	self._detail:set_text(detail)
+	self.panel:set_tint(tint)
+	self.panel:set_border(T.c(col, 0.9))
+	self._disc:add_theme_stylebox_override("panel", T.flat(T.c(col, 0.25), 17, col, 1))
+	self._disc_icon:set_icon(icon)
+	self._disc_icon:set_color(tcol)
+	self.panel:reset_size()
+	W.pop_in(self.panel, 0.0, 1.12, 0.32)
 end
 
 function AlertBanner._show_green(self, last: boolean)
@@ -144,6 +179,10 @@ function AlertBanner.track(self, uid: number): (boolean, boolean)
 	local first = next(self._incoming) == nil
 	self._incoming[uid] = true
 	if first then
+		if self._bio > 0 then
+			self._bio = 0.0
+			self:_set_red()
+		end
 		self:set_visible(true)
 		W.pop_in(self.panel, 0.0, 1.15, 0.35)
 		self:_refresh()
@@ -232,11 +271,35 @@ function AlertBanner.update(self, delta: number)
 		self._green -= delta
 		if self._green <= 0 then
 			self:_set_red()
+			if next(self._incoming) == nil and self._bio <= 0 then
+				local t = self:create_tween()
+				t:tween_property(self, "modulate:a", 0.0, 0.35)
+				t:tween_callback(function()
+					if next(self._incoming) == nil and self._green <= 0 and self._bio <= 0 then
+						self:set_visible(false)
+					end
+					self:set_modulate_a(1.0)
+				end)
+			else
+				self:_refresh()
+			end
+		end
+		return
+	end
+	if self._bio > 0 then
+		self._bio -= delta
+		self._t += delta
+		local col = bio_palette(T, self._bio_tone)
+		local p = 0.5 + 0.5 * math.sin(self._t * 6.0)
+		self.panel:set_border(T.c(col, 0.45 + 0.5 * p))
+		self._disc:set_modulate_a(0.75 + 0.25 * p)
+		if self._bio <= 0 then
+			self:_set_red()
 			if next(self._incoming) == nil then
 				local t = self:create_tween()
 				t:tween_property(self, "modulate:a", 0.0, 0.35)
 				t:tween_callback(function()
-					if next(self._incoming) == nil and self._green <= 0 then
+					if next(self._incoming) == nil and self._green <= 0 and self._bio <= 0 then
 						self:set_visible(false)
 					end
 					self:set_modulate_a(1.0)

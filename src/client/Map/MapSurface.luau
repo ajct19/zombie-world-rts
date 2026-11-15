@@ -616,6 +616,30 @@ function MapSurface.unbind(self: MapSurface)
 	self._flags = nil
 end
 
+local ZOMBIE_MASK = buffer.create(16 * 16)
+do
+	for y = 0, 15 do
+		for x = 0, 15 do
+			local v1 = (x + y) % 8 == 0 or (x + y * 2) % 11 == 0
+			local v2 = (x * 2 - y + 32) % 13 == 0 and (x + y) % 3 ~= 0
+			local p = (x % 7 == 3 and y % 7 == 4) or (x % 11 == 8 and y % 9 == 2)
+			buffer.writeu8(ZOMBIE_MASK, y * 16 + x, if p then 2 elseif (v1 or v2) then 1 else 0)
+		end
+	end
+end
+
+local function make_zombie_skin(): any
+	return {
+		zombie = true,
+		mask = ZOMBIE_MASK,
+		w = 16,
+		h = 16,
+		scale = 1,
+		fills = { 0, 0 },
+		fills_hi = { 0, 0 },
+	}
+end
+
 --- Territory skins (Data/Cosmetics): owner → { mask, w, h, scale, skin, fill2, fill2_hi }. `ids`: the
 --- owners to (re)load (nil: every owner with cosmetics). Colours follow in refresh_palette.
 function MapSurface._load_skins(self: any, ids: { number }?)
@@ -626,11 +650,27 @@ function MapSurface._load_skins(self: any, ids: { number }?)
 	local list = ids
 	if list == nil then
 		list = {}
+		local seen = {}
 		for id in st.cosmetics or {} do
+			seen[id] = true
 			table.insert(list, id)
+		end
+		if type(st.is_infected) == "function" then
+			for id in st.owners do
+				if not seen[id] and st:is_infected(id) then
+					table.insert(list, id)
+				end
+			end
 		end
 	end
 	for _, id in list do
+		if type(st.is_infected) == "function" and st:is_infected(id) then
+			local cur = self._skins[id]
+			if cur == nil or not cur.zombie then
+				self._skins[id] = make_zombie_skin()
+			end
+			continue
+		end
 		local c = (st.cosmetics or {})[id]
 		local skin = if c ~= nil then Cosmetics.item(c.skin) else nil
 		if skin == nil or skin.kind ~= "skin" then
@@ -674,6 +714,7 @@ function MapSurface.refresh_palette(self: MapSurface)
 	local sat = MapSurface.SATURATION
 	local alpha = MapSurface.TERRITORY_ALPHA
 	local hi_k = 1.0 + MapSurface.HIGHLIGHT_BRIGHTEN
+	local skins = (self :: any)._skins
 	for id, o in st.owners do
 		if id <= 0 or id >= MAX_OWNERS then
 			continue
@@ -686,32 +727,63 @@ function MapSurface.refresh_palette(self: MapSurface)
 			r, g, b = Defs.rgba_floats(o.rgba or 0x999999FF)
 		end
 		local fr, fg, fb = saturate(r, g, b, sat)
-		writeu32(self.pal_fill, id * 4, pack(fr * 255, fg * 255, fb * 255, alpha))
-		writeu32(
-			self.pal_fill_hi,
-			id * 4,
-			pack(contrast(fr, hi_k) * 255, contrast(fg, hi_k) * 255, contrast(fb, hi_k) * 255, alpha)
-		)
-		local sk = (self :: any)._skins and (self :: any)._skins[id]
-		if sk ~= nil and sk.fills ~= nil then
-			local a2 = Cosmetics.skin_alpha(sk.skin)
-			for k = 1, #sk.skin.colors do
-				local sr, sg, sb = Cosmetics.color(sk.skin, k)
-				sk.fills[k] = pack((sr :: number) * 255, (sg :: number) * 255, (sb :: number) * 255, a2)
-				sk.fills_hi[k] = pack(
-					contrast(sr :: number, hi_k) * 255,
-					contrast(sg :: number, hi_k) * 255,
-					contrast(sb :: number, hi_k) * 255,
-					a2
-				)
+		local infected = type(st.is_infected) == "function" and st:is_infected(id)
+		local sk = if skins ~= nil then skins[id] else nil
+		if infected then
+			if skins ~= nil and (sk == nil or not sk.zombie) then
+				sk = make_zombie_skin()
+				skins[id] = sk
 			end
-		elseif sk ~= nil then
-			local a2 = Cosmetics.SECONDARY_ALPHA
-			local sr, sg, sb = Cosmetics.secondary(sk.skin, fr, fg, fb)
-			sk.fill2 = pack(sr * 255, sg * 255, sb * 255, a2)
-			sk.fill2_hi = pack(contrast(sr, hi_k) * 255, contrast(sg, hi_k) * 255, contrast(sb, hi_k) * 255, a2)
+			local nr, ng, nb = 0.06 + r * 0.16, 0.14 + g * 0.18, 0.07 + b * 0.14
+			local za = math.min(255, alpha + 28)
+			writeu32(self.pal_fill, id * 4, pack(nr * 255, ng * 255, nb * 255, za))
+			writeu32(
+				self.pal_fill_hi,
+				id * 4,
+				pack(contrast(nr, hi_k) * 255, contrast(ng, hi_k) * 255, contrast(nb, hi_k) * 255, za)
+			)
+			if sk ~= nil then
+				sk.fills[1] = pack(57, 255, 20, 225)
+				sk.fills_hi[1] = pack(130, 255, 95, 240)
+				sk.fills[2] = pack(182, 255, 42, 235)
+				sk.fills_hi[2] = pack(225, 255, 120, 245)
+			end
+		else
+			if skins ~= nil and sk ~= nil and sk.zombie then
+				skins[id] = nil
+				sk = nil
+			end
+			writeu32(self.pal_fill, id * 4, pack(fr * 255, fg * 255, fb * 255, alpha))
+			writeu32(
+				self.pal_fill_hi,
+				id * 4,
+				pack(contrast(fr, hi_k) * 255, contrast(fg, hi_k) * 255, contrast(fb, hi_k) * 255, alpha)
+			)
+			if sk ~= nil and sk.fills ~= nil then
+				local a2 = Cosmetics.skin_alpha(sk.skin)
+				for k = 1, #sk.skin.colors do
+					local sr, sg, sb = Cosmetics.color(sk.skin, k)
+					sk.fills[k] = pack((sr :: number) * 255, (sg :: number) * 255, (sb :: number) * 255, a2)
+					sk.fills_hi[k] = pack(
+						contrast(sr :: number, hi_k) * 255,
+						contrast(sg :: number, hi_k) * 255,
+						contrast(sb :: number, hi_k) * 255,
+						a2
+					)
+				end
+			elseif sk ~= nil then
+				local a2 = Cosmetics.SECONDARY_ALPHA
+				local sr, sg, sb = Cosmetics.secondary(sk.skin, fr, fg, fb)
+				sk.fill2 = pack(sr * 255, sg * 255, sb * 255, a2)
+				sk.fill2_hi = pack(contrast(sr, hi_k) * 255, contrast(sg, hi_k) * 255, contrast(sb, hi_k) * 255, a2)
+			end
 		end
-		local br, bg, bb = darken(r, g, b, MapSurface.BORDER_DARKEN)
+		local br, bg, bb
+		if infected then
+			br, bg, bb = 0.22, 1.0, 0.08
+		else
+			br, bg, bb = darken(r, g, b, MapSurface.BORDER_DARKEN)
+		end
 		local function border(hl: boolean, ally: boolean): number
 			local x, y, z = br, bg, bb
 			if hl then
