@@ -36,10 +36,15 @@ local function shared(name: string): any
 end
 local Catalog = shared("Arsenal")
 local Products = shared("Products")
+local I18n = shared("I18n")
 local Prices = require("./Prices")
 local ArsenalDemo = require("./ArsenalDemo")
 local FrameClock = require("../Map/FrameClock")
 local TweenService = if IS_ROBLOX then game:GetService("TweenService") else nil
+
+local function it_title(it: any): string
+	return I18n.t("ars_" .. it.key .. "_title")
+end
 
 local Art: any = (function()
 	local ok, m = pcall(function()
@@ -55,11 +60,11 @@ local Arsenal = W.class(W.Control)
 
 --- The list's groups, in order: a heading and the kinds in it.
 Arsenal.GROUPS = {
-	{ "NUKES", { nuke = true } },
-	{ "ARMY", { call = true, structure = true } },
-	{ "BOOSTS", { boost = true } },
+	{ "ars_grp_nukes", { nuke = true } },
+	{ "ars_grp_army", { call = true, structure = true } },
+	{ "ars_grp_boosts", { boost = true } },
 }
-Arsenal.KIND_TAGS = { structure = "BUILDING", nuke = "NUKE", call = "ORDER", boost = "BOOST" }
+Arsenal.KIND_TAGS = { structure = "ars_kind_structure", nuke = "ars_kind_nuke", call = "ars_kind_call", boost = "ars_kind_boost" }
 --- Under the title.
 Arsenal.SUBTITLE = "Unlock once, keep it forever. Earn Stars by playing matches."
 --- Logical px: the list's width, a row's height, the item's width and its preview's height (desktop);
@@ -216,9 +221,10 @@ function Arsenal.new(c: any)
 	local tv = UITheme.vbox(0)
 	tv.size_flags_horizontal = W.EXPAND_FILL
 	tv.size_flags_vertical = W.SHRINK_CENTER
-	local title = UITheme.label("ARSENAL", 20, 800, UITheme.TEXT, 3)
+	local title = UITheme.label(I18n.t("ars_title"), 20, 800, UITheme.TEXT, 3)
+	self._title_lbl = title
 	tv:add_child(title)
-	self._sub = UITheme.label(Arsenal.SUBTITLE, 12, 500, UITheme.TEXT_2)
+	self._sub = UITheme.label(I18n.t("ars_sub"), 12, 500, UITheme.TEXT_2)
 	tv:add_child(self._sub)
 	head:add_child(tv)
 	local bal = GlassPanel.new(12.0, 6.0, 999, false, 0)
@@ -345,7 +351,7 @@ function Arsenal._build_list(self)
 		new("TextLabel", {
 			Name = "Group",
 			BackgroundTransparency = 1,
-			Text = g[1],
+			Text = I18n.t(g[1]),
 			FontFace = FONT_B,
 			TextSize = math.floor(10 * u),
 			TextColor3 = MUTED,
@@ -411,7 +417,7 @@ function Arsenal._row(self, it: any, order: number, rh: number, u: number): any
 	local name = new("TextLabel", {
 		Name = "Name",
 		BackgroundTransparency = 1,
-		Text = it.title,
+		Text = it_title(it),
 		FontFace = FONT_B,
 		TextScaled = true,
 		TextColor3 = WHITE,
@@ -477,7 +483,7 @@ function Arsenal._refresh_list(self)
 		r.stroke.Transparency = if on then 0 else 1
 		if inv.unlocks[key] then
 			r.icon.Visible = false
-			r.text.Text = "OWNED"
+			r.text.Text = I18n.t("ars_owned")
 			r.text.TextColor3 = OWNED_GREEN
 		elseif it.stars ~= nil and stars >= it.stars then
 			r.icon.Visible = true
@@ -490,7 +496,7 @@ function Arsenal._refresh_list(self)
 			r.icon.Visible = price ~= nil
 			r.icon.Image = ROBUX
 			r.icon.ImageColor3 = WHITE
-			r.text.Text = if price ~= nil then Arsenal.commas(price) else "SOON"
+			r.text.Text = if price ~= nil then Arsenal.commas(price) else I18n.t("ars_soon")
 			r.text.TextColor3 = WHITE
 		end
 	end
@@ -597,10 +603,14 @@ function Arsenal._build_detail(self)
 	}, root)
 	local y = 0
 	local name_fs = if compact then 18 else 24
+	local ttxt = it_title(it)
+	if I18n.get() == "en" then
+		ttxt = string.upper(ttxt)
+	end
 	new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Text = string.upper(it.title),
+		Text = ttxt,
 		FontFace = FONT_H,
 		TextSize = math.floor(name_fs * u),
 		TextColor3 = WHITE,
@@ -641,11 +651,11 @@ function Arsenal._build_detail(self)
 	end
 	-- (phones: the facts only; the list's headings say what kind it is, the subtitle that it's forever)
 	if not compact then
-		chip(Arsenal.KIND_TAGS[it.kind] or "", WHITE, 1)
-		chip("FOREVER", OWNED_GREEN, 2)
+		chip(I18n.t(Arsenal.KIND_TAGS[it.kind] or "ars_kind_structure"), WHITE, 1)
+		chip(I18n.t("ars_forever"), OWNED_GREEN, 2)
 	end
-	for i, f in it.facts or {} do
-		chip(string.upper(f), GOLD, 2 + i)
+	for i = 1, #(it.facts or {}) do
+		chip(I18n.t("ars_" .. it.key .. "_f" .. tostring(i)), GOLD, 2 + i)
 	end
 	y += 28
 	-- the one sentence
@@ -654,7 +664,7 @@ function Arsenal._build_detail(self)
 	new("TextLabel", {
 		Name = "Plain",
 		BackgroundTransparency = 1,
-		Text = it.plain or it.tagline,
+		Text = I18n.t("ars_" .. it.key .. "_plain"),
 		FontFace = FONT_M,
 		TextSize = math.floor(plain_fs * u),
 		TextColor3 = Color3.fromRGB(214, 222, 240),
@@ -808,7 +818,7 @@ local function buy_button(
 	local label = new("TextLabel", {
 		Name = "Label",
 		BackgroundTransparency = 1,
-		Text = if busy then "..." elseif on then "BUY NOW" else "SOON",
+		Text = if busy then "..." elseif on then I18n.t("ars_buy") else I18n.t("ars_soon"),
 		FontFace = FONT_H,
 		TextSize = math.floor(fs * u),
 		TextColor3 = if on then WHITE else MUTED,
@@ -932,13 +942,13 @@ function Arsenal._build_cta(self)
 	if inv.unlocks[it.key] then
 		local own = button(d.cta, "Owned", y, bh, u, OWNED_GREEN, OWNED_GREEN)
 		pic(own.row, UITheme.icon("check") or "", 18, OWNED_GREEN, u, 1)
-		words(own.row, "OWNED", if compact then 15 else 17, OWNED_GREEN, u, 2, bh)
+		words(own.row, I18n.t("ars_owned"), if compact then 15 else 17, OWNED_GREEN, u, 2, bh)
 		own.button.Active = false
 		y += bh + 8
 		self:_line(
 			d.cta,
 			y,
-			if it.kind == "boost" then "It's always on, in every match." else "It's in your build bar in every match.",
+			if it.kind == "boost" then I18n.t("ars_owned_boost") else I18n.t("ars_owned_unit"),
 			MUTED
 		)
 		return
@@ -953,7 +963,7 @@ function Arsenal._build_cta(self)
 	y += bh + buy.lip / u + 8
 	-- the other way: Stars
 	if it.stars == nil then
-		self:_line(d.cta, y, "Robux only.", MUTED)
+		self:_line(d.cta, y, I18n.t("ars_robux_only"), MUTED)
 		y += 18
 	elseif stars >= it.stars then
 		local confirm = self._confirm == it.key
@@ -962,11 +972,11 @@ function Arsenal._build_cta(self)
 		if busy and pending.how == "stars" then
 			words(alt.row, "...", if compact then 12 else 14, col, u, 1, sh)
 		elseif confirm then
-			words(alt.row, "PRESS AGAIN TO SPEND", if compact then 12 else 14, col, u, 1, sh)
+			words(alt.row, I18n.t("ars_press_again"), if compact then 12 else 14, col, u, 1, sh)
 			pic(alt.row, UITheme.icon("star") or "", 15, col, u, 2)
 			words(alt.row, Arsenal.commas(it.stars), if compact then 12 else 14, col, u, 3, sh)
 		else
-			words(alt.row, "OR UNLOCK WITH", if compact then 12 else 14, col, u, 1, sh)
+			words(alt.row, I18n.t("ars_unlock_with"), if compact then 12 else 14, col, u, 1, sh)
 			pic(alt.row, UITheme.icon("star") or "", 15, col, u, 2)
 			words(alt.row, Arsenal.commas(it.stars), if compact then 12 else 14, col, u, 3, sh)
 		end
@@ -992,7 +1002,7 @@ function Arsenal._build_cta(self)
 		local fs = if compact then 11 else 12
 		new("TextLabel", {
 			BackgroundTransparency = 1,
-			Text = "Or earn it by playing:",
+			Text = I18n.t("ars_earn_playing"),
 			FontFace = FONT_M,
 			TextSize = math.floor(fs * u),
 			TextColor3 = MUTED,
@@ -1004,7 +1014,7 @@ function Arsenal._build_cta(self)
 		pic(row, UITheme.icon("star") or "", 12, GOLD, u, 2)
 		new("TextLabel", {
 			BackgroundTransparency = 1,
-			Text = string.format("%s of %s", Arsenal.commas(stars), Arsenal.commas(it.stars)),
+			Text = I18n.t("ars_of", Arsenal.commas(stars), Arsenal.commas(it.stars)),
 			FontFace = FONT_B,
 			TextSize = math.floor(fs * u),
 			TextColor3 = GOLD,
@@ -1103,6 +1113,18 @@ function Arsenal._rebuild(self)
 	self:_refresh()
 end
 
+function Arsenal.refresh_locale(self)
+	if self._title_lbl ~= nil then
+		self._title_lbl:set_text(I18n.t("ars_title"))
+	end
+	if self._sub ~= nil then
+		self._sub:set_text(I18n.t("ars_sub"))
+	end
+	if self.is_open then
+		self:_rebuild()
+	end
+end
+
 -- ---------------------------------------------------------------------------------------------
 -- Buying
 -- ---------------------------------------------------------------------------------------------
@@ -1115,7 +1137,7 @@ function Arsenal._stars_pressed(self, it: any)
 	if (inv.stars or 0) < it.stars then
 		self.ctx:sfx("deny", -4.0)
 		local short = Arsenal.commas(it.stars - (inv.stars or 0))
-		self:_say(string.format("%s more Stars to go. Play matches to earn them.", short), GOLD)
+		self:_say(I18n.t("ars_more_stars", short), GOLD)
 		return
 	end
 	if self._confirm ~= it.key or os.clock() > self._confirm_until then
@@ -1130,7 +1152,7 @@ function Arsenal._stars_pressed(self, it: any)
 	local s = self.ctx.session
 	if s == nil or not s:buy_unlock(it.key) then
 		self.ctx:sfx("deny")
-		self:_say("Couldn't reach the server. Try again in a moment.", UITheme.RED)
+		self:_say(I18n.t("ars_err_connect"), UITheme.RED)
 		return
 	end
 	self:_report("arsenal_click", it.key, "stars")
@@ -1147,7 +1169,7 @@ function Arsenal._robux_pressed(self, it: any)
 	end
 	if p == nil or p.id == 0 or not IS_ROBLOX then
 		self.ctx:sfx("deny", -4.0)
-		self:_say(it.title .. " isn't on sale for Robux yet.", MUTED)
+		self:_say(I18n.t("ars_not_on_sale", it_title(it)), MUTED)
 		return
 	end
 	self._confirm = nil
@@ -1160,7 +1182,7 @@ function Arsenal._robux_pressed(self, it: any)
 	end)
 	if not ok then
 		self._pending = nil
-		self:_say("Purchases aren't available right now.", UITheme.RED)
+		self:_say(I18n.t("ars_err_unavail"), UITheme.RED)
 		self:_refresh()
 	end
 end
@@ -1197,9 +1219,9 @@ function Arsenal._on_unlock_result(self, key: string, ok: boolean, reason: strin
 	self.ctx:sfx("deny")
 	self:_say(
 		if reason == "not enough"
-			then "Not enough Stars."
-			elseif reason == "owned" then "You already have it."
-			else "Couldn't unlock it. Nothing was spent. Try again in a moment.",
+			then I18n.t("ars_err_stars")
+			elseif reason == "owned" then I18n.t("ars_err_owned")
+			else I18n.t("ars_err_failed"),
 		UITheme.RED
 	)
 	self:_refresh()
@@ -1217,7 +1239,11 @@ function Arsenal._on_unlocked(self, key: string)
 	local it = Catalog.item(key)
 	self.ctx:sfx("unlock")
 	self:_select(key, false)
-	self:_say(string.upper(it.title) .. " UNLOCKED!", GOLD)
+	local ut = it_title(it)
+	if I18n.get() == "en" then
+		ut = string.upper(ut)
+	end
+	self:_say(I18n.t("ars_unlocked_fmt", ut), GOLD)
 	self:_refresh()
 	local d = self._detail
 	if d ~= nil and d.key == key then
@@ -1260,7 +1286,7 @@ function Arsenal.tick(self)
 	local p = self._pending
 	if p ~= nil and p.phase ~= "prompt" and now - p.since > Arsenal.WAIT_S then
 		self._pending = nil
-		self:_say("That's taking a while. If you paid, it's saved and will show up shortly.", MUTED)
+		self:_say(I18n.t("ars_wait_grant"), MUTED)
 		again = true
 	end
 	if self._note ~= nil and now >= self._note_until then
@@ -1283,6 +1309,12 @@ function Arsenal.open(self, focus: string?, from: string?)
 	self._from = from or "title"
 	self._confirm = nil
 	self._note = nil
+	if self._title_lbl ~= nil then
+		self._title_lbl:set_text(I18n.t("ars_title"))
+	end
+	if self._sub ~= nil then
+		self._sub:set_text(I18n.t("ars_sub"))
+	end
 	if not self.is_open then
 		self.is_open = true
 		table.clear(self._viewed)

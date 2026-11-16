@@ -1355,6 +1355,12 @@ function TitleScreen.refresh_locale(self)
 	if self._credits ~= nil then
 		self._credits:set_text(UICtx.t(if self.ctx.compact then "title_credits_short" else "title_credits"))
 	end
+	if self._arsenal_btn ~= nil and type(self._arsenal_btn.refresh_locale) == "function" then
+		self._arsenal_btn:refresh_locale()
+	end
+	if self._crate_btn ~= nil and type(self._crate_btn.refresh_locale) == "function" then
+		self._crate_btn:refresh_locale()
+	end
 	self:_refresh_greeting()
 	self:_refresh_mp()
 	self:_refresh_diff()

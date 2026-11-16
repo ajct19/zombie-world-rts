@@ -331,17 +331,21 @@ function UIRules.result_offers(award: any, inv: any, catalog: any, stars: number
 	local goal = catalog.next_goal(unlocks)
 	if goal ~= nil then
 		local ready = balance >= goal.stars
+		local gtitle = UICtx.t("ars_" .. goal.key .. "_title")
+		if UICtx.data("I18n").get() == "en" then
+			gtitle = string.upper(gtitle)
+		end
 		out.goal = {
 			key = goal.key,
 			ready = ready,
 			text = if ready
-				then "UNLOCK " .. string.upper(goal.title)
-				else string.format("%s  %s / %s", string.upper(goal.title), UICtx.commas(balance), UICtx.commas(goal.stars)),
+				then UICtx.t("offer_unlock_fmt", gtitle)
+				else string.format("%s  %s / %s", gtitle, UICtx.commas(balance), UICtx.commas(goal.stars)),
 		}
 	end
 	if not unlocks.stars2x and catalog.item("stars2x") ~= nil then
 		-- (a payout already doubled never gets here: its owner has the booster)
-		out.x2 = { text = string.format("WITH 2X STARS: +%s", UICtx.commas(math.floor(award.total) * 2)) }
+		out.x2 = { text = UICtx.t("offer_x2_fmt", UICtx.commas(math.floor(award.total) * 2)) }
 	end
 	return out
 end

@@ -31,6 +31,8 @@ Stars.FLOOR = 100
 Stars.PER_MINUTE = 15
 Stars.PER_SHARE = 30
 Stars.PER_KILL = 54
+Stars.PER_HIVE = 80
+Stars.PURGE_BONUS = 200
 Stars.PLACE_RATE = 14
 Stars.WIN_RATE = 18
 Stars.QUANTUM = 5
@@ -49,14 +51,16 @@ Stars.MAX_MINUTES = 240
 Stars.MAX_KILLS = 200
 Stars.MAX_FIELD = 1024
 
-Stars.LINES = { "played", "survived", "territory", "conquests", "placed", "victory" }
+Stars.LINES = { "played", "survived", "territory", "conquests", "hives", "placed", "victory", "purged" }
 Stars.LABELS = {
 	played = "Match played",
 	survived = "Time survived",
 	territory = "Land held",
 	conquests = "Nations conquered",
+	hives = "Hordes purged",
 	placed = "Final place",
 	victory = "Victory",
+	purged = "Plague purged",
 	double = "2x Stars",
 	general = "General +50%",
 }
@@ -68,6 +72,8 @@ export type Result = {
 	minutes: number,
 	shares: number,
 	kills: number,
+	hives: number?,
+	purged: boolean?,
 	place: number,
 	field: number,
 }
@@ -109,10 +115,16 @@ function Stars.payout(r: Result, mode: string?, double: boolean?): { lines: { { 
 	add("survived", Stars.PER_MINUTE * minutes)
 	add("territory", Stars.PER_SHARE * math.max(r.shares, 0))
 	add("conquests", Stars.PER_KILL * math.max(r.kills, 0))
+	if (r.hives or 0) > 0 then
+		add("hives", Stars.PER_HIVE * (r.hives :: number))
+	end
 	if not r.left then
 		add("placed", Stars.PLACE_RATE * Stars.place_score(r.place, r.field) * minutes)
 		if r.won then
 			add("victory", Stars.WIN_RATE * minutes)
+		end
+		if r.purged then
+			add("purged", Stars.PURGE_BONUS)
 		end
 	end
 	if double and total > 0 then
@@ -140,13 +152,16 @@ end
 function Stars.sanitize(report: any, real_minutes: number): Result
 	local rep = if type(report) == "table" then report else {}
 	local field = math.floor(num(rep.field, 1, Stars.MAX_FIELD))
+	local won = rep.won == true and rep.left ~= true
 	return {
 		spawned = rep.spawned == true,
 		left = rep.left == true,
-		won = rep.won == true and rep.left ~= true,
+		won = won,
 		minutes = num(rep.minutes, 0, math.min(Stars.MAX_MINUTES, math.max(real_minutes, 0))),
 		shares = num(rep.shares, 0, field),
 		kills = math.floor(num(rep.kills, 0, math.min(field, Stars.MAX_KILLS))),
+		hives = math.floor(num(rep.hives, 0, math.min(field, Stars.MAX_KILLS))),
+		purged = won and rep.purged == true,
 		place = math.floor(num(rep.place, 1, field)),
 		field = field,
 	}
@@ -206,7 +221,7 @@ function Tracker.watch(self: any, id: number)
 		return
 	end
 	local sim = self.sim
-	self.seats[id] = { start = sim.tick, peak = sim.o_tiles[id] or 0, kills = 0, out_tick = nil, place = nil }
+	self.seats[id] = { start = sim.tick, peak = sim.o_tiles[id] or 0, kills = 0, hives = 0, out_tick = nil, place = nil }
 	if self._counted and sim.o_spawned[id] ~= 1 then
 		-- a late joiner makes the field one bigger once it lands (see step)
 		self.seats[id].late = true
@@ -223,7 +238,7 @@ function Tracker.adopt(self: any, old: number, new: number)
 	self.seats[old] = nil
 	local sim = self.sim
 	self.seats[new] =
-		{ start = sim.tick, peak = 0, base = sim.o_tiles[new] or 0, kills = 0, out_tick = nil, place = nil }
+		{ start = sim.tick, peak = 0, base = sim.o_tiles[new] or 0, kills = 0, hives = 0, out_tick = nil, place = nil }
 end
 
 --- After every Sim step, with the step's events.
@@ -262,6 +277,9 @@ function Tracker.step(self: any, events: { { any } }?)
 				local ks = self.seats[killer]
 				if ks ~= nil and killer ~= id then
 					ks.kills += 1
+					if type(sim.is_infected) == "function" and sim:is_infected(id) then
+						ks.hives = (ks.hives or 0) + 1
+					end
 				end
 			end
 		end
@@ -286,6 +304,8 @@ function Tracker.result(self: any, id: number, left: boolean?): Result
 			minutes = 0,
 			shares = 0,
 			kills = 0,
+			hives = 0,
+			purged = false,
 			place = 1,
 			field = 1,
 		}
@@ -305,6 +325,10 @@ function Tracker.result(self: any, id: number, left: boolean?): Result
 	local land = if sim.map ~= nil then sim.map.land_count else 0
 	local share = math.max(land, 1) / field
 	local gone = left == true and seat.out_tick == nil and sim.phase ~= PHASE_OVER
+	local purged = not gone
+		and sim.phase == PHASE_OVER
+		and sim.over_reason == Defs.OVER_PLAGUE_PURGED
+		and not (type(sim.is_infected) == "function" and sim:is_infected(id))
 	return {
 		spawned = true,
 		left = gone,
@@ -319,6 +343,8 @@ function Tracker.result(self: any, id: number, left: boolean?): Result
 		minutes = math.max(0, (seat.out_tick or sim.tick) - seat.start) / TICKS_PER_MINUTE,
 		shares = seat.peak / share,
 		kills = seat.kills,
+		hives = seat.hives or 0,
+		purged = purged,
 		place = math.min(place, field),
 		field = field,
 	}

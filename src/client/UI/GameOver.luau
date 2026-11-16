@@ -367,16 +367,15 @@ end
 --- What the Stars were for: the pill's card.
 function GameOver._stars_spec(self): { [string]: any }
 	local a = self._award
-	local StarsData = UICtx.data("Stars")
 	local rows = {}
 	for _, l in a.lines do
-		table.insert(rows, { StarsData.LABELS[l[1]] or l[1], "+" .. UICtx.commas(l[2]), UITheme.GOLD })
+		table.insert(rows, { UICtx.t("stars_" .. tostring(l[1])), "+" .. UICtx.commas(l[2]), UITheme.GOLD })
 	end
 	return {
-		title = "Stars earned",
-		body = "Stars unlock new weapons in the Arsenal.",
+		title = UICtx.t("stars_title"),
+		body = UICtx.t("stars_body"),
 		rows = rows,
-		hint = string.format("You have %s Stars", UICtx.commas(a.balance or 0)),
+		hint = UICtx.t("stars_have", UICtx.commas(a.balance or 0)),
 		hint_color = UITheme.GOLD,
 		hint_icon = "star",
 	}
@@ -531,17 +530,17 @@ function GameOver.open(self, kind: string, winner: number, killer: number, stats
 		return sl
 	end
 	self._stats:add_child(
-		slot(self:_stat_card("globe", UITheme.fmt_pct(tonumber(stats.peak_share) or 0.0), "Peak land", UITheme.AMBER))
+		slot(self:_stat_card("globe", UITheme.fmt_pct(tonumber(stats.peak_share) or 0.0), UICtx.t("over_stat_land"), UITheme.AMBER))
 	)
 	self._stats:add_child(
-		slot(self:_stat_card("troops", UITheme.fmt_troops(tonumber(stats.max_troops) or 0), "Max troops", UITheme.CYAN))
+		slot(self:_stat_card("troops", UITheme.fmt_troops(tonumber(stats.max_troops) or 0), UICtx.t("over_stat_troops"), UITheme.CYAN))
 	)
 	self._stats:add_child(
 		slot(
 			self:_stat_card(
 				"skull",
 				tostring(math.floor(tonumber(stats.kills) or 0)),
-				"Nations eliminated",
+				UICtx.t("over_stat_kills"),
 				UITheme.RED
 			)
 		)
@@ -549,7 +548,7 @@ function GameOver.open(self, kind: string, winner: number, killer: number, stats
 	-- The match's length: a result reached after an elimination still reports the whole match
 	-- (stats.match_s), not the moment the player fell (review R2-6).
 	local secs = UIRules.result_seconds(kind, stats)
-	self._stats:add_child(slot(self:_stat_card("clock", UITheme.fmt_time(secs), "Match duration", UITheme.VIOLET)))
+	self._stats:add_child(slot(self:_stat_card("clock", UITheme.fmt_time(secs), UICtx.t("over_stat_time"), UITheme.VIOLET)))
 	local solo = ctx:mode() == UICtx.MODE_SOLO
 	local running = s ~= nil and s.phase == Defs.PHASE_PLAYING
 	-- the Stars this match (or this life) paid, if the payout is in already
@@ -557,8 +556,8 @@ function GameOver.open(self, kind: string, winner: number, killer: number, stats
 	self:set_award(if sess ~= nil then sess.last_award else nil)
 	self._again:set_visible(solo)
 	self._spec:set_visible(kind == "eliminated" and running)
-	self._spec:set_text("Keep watching")
-	self._home:set_text("Return to title")
+	self._spec:set_text(UICtx.t("over_keep_watching"))
+	self._home:set_text(UICtx.t("over_return_title"))
 	self._next:set_visible(ctx:mode() == UICtx.MODE_MULTI and kind ~= "eliminated")
 	self:_refresh_next()
 	self:_show_takeover()
@@ -835,7 +834,10 @@ function GameOver.refresh_locale(self)
 		self._again:set_text(I18n.t("over_play_again"))
 	end
 	if self._home ~= nil then
-		self._home:set_text(I18n.t("over_main_menu"))
+		self._home:set_text(I18n.t("over_return_title"))
+	end
+	if self._spec ~= nil then
+		self._spec:set_text(I18n.t("over_keep_watching"))
 	end
 end
 

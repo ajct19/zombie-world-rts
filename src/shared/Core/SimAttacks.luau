@@ -842,7 +842,8 @@ function SimAttacks.install(C: any)
 			local tt = readu8(terr, t)
 			local mag = ATTACK_MAG[tt]
 			local tc = ATTACK_TILE_COST[tt]
-			if not neutral and readu8(def_cover, t) > 0 and self:_defense_post_covers(t, tg) then
+			local bunker_cov = not neutral and readu8(def_cover, t) > 0 and self:_defense_post_covers(t, tg)
+			if bunker_cov then
 				if at_inf and not tg_inf then
 					-- Quarantine Bunker: heavy attrition against infected hordes
 					mag *= Rules.ZOMBIE_BUNKER_MAG
@@ -851,6 +852,8 @@ function SimAttacks.install(C: any)
 					mag *= Rules.DEFENSE_POST_MAG
 					tc *= Rules.DEFENSE_POST_COST
 				end
+			elseif at_inf then
+				tc *= Rules.zombie_tc_mult(self.strain_level or 0)
 			end
 			if bit32.band(readu8(flags, t), F_FALLOUT) ~= 0 then
 				local fk = if at_inf then Rules.ZOMBIE_FALLOUT_MULT else fo_mod
@@ -905,7 +908,7 @@ function SimAttacks.install(C: any)
 					if at_inf and not tg_vax and dl > 0.0 then
 						local leech_cap = o_cap[at] * Rules.ZOMBIE_OVERCAP_MULT
 						if a.troops < leech_cap then
-							a.troops = math.min(leech_cap, a.troops + dl * Rules.ZOMBIE_LEECH_SHARE)
+							a.troops = math.min(leech_cap, a.troops + dl * Rules.zombie_leech(self.strain_level or 0))
 						end
 					end
 				end
@@ -937,7 +940,7 @@ function SimAttacks.install(C: any)
 					if at_inf and not tg_vax and dl2 > 0.0 then
 						local leech_cap = o_cap[at] * Rules.ZOMBIE_OVERCAP_MULT
 						if a.troops < leech_cap then
-							a.troops = math.min(leech_cap, a.troops + dl2 * Rules.ZOMBIE_LEECH_SHARE)
+							a.troops = math.min(leech_cap, a.troops + dl2 * Rules.zombie_leech(self.strain_level or 0))
 						end
 					end
 				end

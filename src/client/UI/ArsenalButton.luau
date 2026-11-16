@@ -8,6 +8,9 @@ local W = require("./Widgets")
 local Signal = UITheme.core("Signal")
 
 local IS_ROBLOX = typeof(game) == "Instance"
+local I18n: any = if IS_ROBLOX
+	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.I18n) :: any
+	else (require :: any)("../../shared/Data/I18n")
 local TweenService = if IS_ROBLOX then game:GetService("TweenService") else nil
 
 local ArsenalButton = W.class(W.Control)
@@ -115,10 +118,10 @@ function ArsenalButton._build(self)
 		pill
 	)
 	self._pill = pill
-	local pt = new("TextLabel", {
+	self._pill_text = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.fromScale(1, 1),
-		Text = "ARSENAL",
+		Text = I18n.t("btn_arsenal"),
 		FontFace = FONT_B,
 		TextColor3 = Color3.fromRGB(46, 26, 4),
 		TextScaled = true,
@@ -129,7 +132,7 @@ function ArsenalButton._build(self)
 		PaddingBottom = UDim.new(0.16, 0),
 		PaddingLeft = UDim.new(0.1, 0),
 		PaddingRight = UDim.new(0.1, 0),
-	}, pt)
+	}, self._pill_text)
 	-- the Stars badge (top right of the shield)
 	local badge = new("Frame", {
 		Name = "Stars",
@@ -254,6 +257,12 @@ function ArsenalButton.bind(self, s: any)
 		self:refresh()
 	end)
 	self:refresh()
+end
+
+function ArsenalButton.refresh_locale(self)
+	if self._pill_text ~= nil then
+		self._pill_text.Text = I18n.t("btn_arsenal")
+	end
 end
 
 function ArsenalButton.refresh(self)

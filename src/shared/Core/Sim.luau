@@ -117,10 +117,12 @@ function Sim.new(p_map: any, config: { [string]: any }?): any
 	self.zombie_role = if self.game_mode == "zombie" and cfg.zombie_role == "infected" then "infected" else "survivor"
 	self.outbreak_spawned = false
 	self.outbreak_tick = 0
+	self.strain_level = 0
 	self._zombie_next_mutate = 0
 	self._zombie_mutated = 0
 	self._zombie_extra_tick = 0
 	self._d_outbreak = false
+	self._d_strain = 0
 	--- Wall-clock microseconds of the last step() (diagnostics).
 	self.last_step_usec = 0
 	--- When true, step() accumulates per-subsystem microseconds into `prof` (see PROF_NAMES).
@@ -452,6 +454,10 @@ function Sim.step(self: any): { [string]: any }
 		d.outbreak_spawned = true
 		self._d_outbreak = false
 	end
+	if self._d_strain > 0 then
+		d.strain_level = self._d_strain
+		self._d_strain = 0
+	end
 	if tick % 5 == 0 or self._force_stats then
 		d.stats = self:_stats_rows()
 		self._force_stats = false
@@ -558,6 +564,7 @@ function Sim.snapshot(self: any): { [string]: any }
 		zombie_role = self.zombie_role,
 		outbreak_spawned = self.outbreak_spawned,
 		outbreak_tick = self.outbreak_tick,
+		strain_level = self.strain_level,
 		teams = if #self.team_names > 0 then self.team_names else nil,
 		winner_team = if self.winner_team ~= 0 then self.winner_team else nil,
 		owner = GameState.encode_grid(self.owner),
@@ -1534,6 +1541,8 @@ function Sim._start_playing(self: any)
 	self:ev({ Ev.PHASE, Defs.PHASE_PLAYING, 0 })
 	if self.game_mode == "zombie" then
 		self._zombie_mutated = 0
+		self.strain_level = 0
+		self._d_strain = 0
 		if self.zombie_role == "infected" then
 			self.outbreak_spawned = true
 			self.outbreak_tick = self.tick
@@ -1602,10 +1611,18 @@ function Sim._economy_tick(self: any)
 		end
 		-- maxTroops: + cityTroopIncrease per level of each finished city.
 		local cap = max_troops(tkind, o_tiles[id], o_alevel[id * STRUCT_KINDS + Defs.S_CITY], tdiff)
+		local strain = self.strain_level
+		if tkind == Defs.KIND_ZOMBIE and strain > 0 then
+			cap *= Rules.zombie_cap_mult(strain)
+		end
 		o_cap[id] = cap
 		-- Per-tick player update: + troopIncreaseRate troops (whole troops: truncated) and
 		-- + goldAdditionRate gold every tick, never during the spawn phase.
-		o_troops[id] += troop_growth_applied(tkind, o_troops[id], cap, tdiff)
+		local gain = troop_growth_applied(tkind, o_troops[id], cap, tdiff)
+		if tkind == Defs.KIND_ZOMBIE and strain > 0 then
+			gain = Defs.trunc(gain * Rules.zombie_growth_mult(strain))
+		end
+		o_troops[id] += gain
 		if (tick + id) % 10 == 0 then
 			o_income[id] = Rules.passive_income(if tkind == Defs.KIND_ZOMBIE then Defs.KIND_ZOMBIE else kind, o_tiles[id])
 		end
@@ -1865,6 +1882,21 @@ function Sim._check_mutations(self: any)
 	self:mutate_owner(pool[idx])
 end
 
+function Sim.evolve_strain(self: any): number
+	if self.game_mode ~= "zombie" or self.phase ~= Defs.PHASE_PLAYING or self.strain_level >= #Rules.ZOMBIE_EVO_TICKS then
+		return self.strain_level
+	end
+	self.strain_level += 1
+	self._d_strain = self.strain_level
+	self._force_stats = true
+	if self.strain_level == 1 or self.strain_level == 3 then
+		self:_spawn_outbreaks(1)
+	elseif self.strain_level == 2 then
+		self:_check_mutations()
+	end
+	return self.strain_level
+end
+
 function Sim._zombie_tick(self: any)
 	if self.game_mode ~= "zombie" or self.phase ~= Defs.PHASE_PLAYING then
 		return
@@ -1883,6 +1915,12 @@ function Sim._zombie_tick(self: any)
 		self._zombie_mutated += 1
 		self._zombie_next_mutate = self.tick + Rules.ZOMBIE_MUTATE_INTERVAL_TICKS
 		self:_check_mutations()
+	end
+	if self.outbreak_spawned and self.strain_level < #Rules.ZOMBIE_EVO_TICKS then
+		local next_t = self.outbreak_tick + Rules.ZOMBIE_EVO_TICKS[self.strain_level + 1]
+		if self.tick >= next_t then
+			self:evolve_strain()
+		end
 	end
 end
 

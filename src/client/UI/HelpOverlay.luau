@@ -268,7 +268,7 @@ HelpOverlay.SECTIONS = {
 HelpOverlay.LEGAL = {
 	"BioFront: Zombie World RTS is a modified fork of RoWorld (lukechatton/roworld) and OpenFront. © OpenFront and Contributors. RoWorld changes © 2026 Snick Co.",
 	"This software is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3 (LICENSE). It comes with ABSOLUTELY NO WARRANTY.",
-	"Maps made with Natural Earth and NOAA ETOPO1 data (public domain). Country flags from Wikimedia Commons (public domain). Music by Rodrigo Flores.",
+	"Maps made with Natural Earth and NOAA ETOPO1 data (public domain). Country flags from Wikimedia Commons (public domain). Music courtesy of APM Music.",
 	"BioFront is not affiliated with or endorsed by OpenFront or RoWorld.",
 }
 HelpOverlay.SOURCE_REPO = "ajct19/zombie-world-rts"

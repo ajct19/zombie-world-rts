@@ -208,6 +208,7 @@ function GameState.new(world: any?)
 	self.zombie_role = "survivor"
 	self.outbreak_spawned = false
 	self.outbreak_tick = 0
+	self.strain_level = 0
 	--- Team games (Core/Teams): the team names (empty outside one) and the team that won (0: none).
 	self.team_names = {} :: { string }
 	self.winner_team = 0
@@ -863,6 +864,7 @@ function GameState.load_snapshot(self: GameState, snap: { [string]: any })
 	self.zombie_role = if self.game_mode == "zombie" and snap.zombie_role == "infected" then "infected" else "survivor"
 	self.outbreak_spawned = snap.outbreak_spawned == true
 	self.outbreak_tick = tonumber(snap.outbreak_tick) or 0
+	self.strain_level = tonumber(snap.strain_level) or 0
 	self.team_names = if type(snap.teams) == "table" then snap.teams else {}
 	self.winner_team = tonumber(snap.winner_team) or 0
 	clear(self.owners)
@@ -978,9 +980,14 @@ local HANDLERS: { [number]: (GameState, { any }) -> () } = {}
 function GameState.apply_delta(self: GameState, delta: { [string]: any })
 	self.tick = delta.t or (self.tick + 1)
 	local fire_outbreak = false
+	local fire_strain = 0
 	if delta.outbreak_spawned == true then
 		fire_outbreak = not self.outbreak_spawned
 		self.outbreak_spawned = true
+	end
+	if type(delta.strain_level) == "number" and delta.strain_level > self.strain_level then
+		self.strain_level = delta.strain_level
+		fire_strain = self.strain_level
 	end
 	local tiles = delta.tiles
 	if tiles ~= nil and #tiles > 0 then
@@ -1018,6 +1025,9 @@ function GameState.apply_delta(self: GameState, delta: { [string]: any })
 	end
 	if fire_outbreak and self.game_mode == "zombie" then
 		self.bio_event:Fire("outbreak", 0)
+	end
+	if fire_strain > 0 and self.game_mode == "zombie" then
+		self.bio_event:Fire("strain", fire_strain)
 	end
 	if next(self.shells) ~= nil then
 		local landed = {}

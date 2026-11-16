@@ -551,7 +551,10 @@ function TopStatus._refresh_grace(self)
 				self._grace_ic:set_color(col)
 			end
 			T.set_font_color(self._grace, col)
-			self._grace:set_text(I18n.t("top_bio_threat", pct))
+			local strain = tonumber(s.strain_level) or 0
+			self._grace:set_text(
+				if strain > 0 then I18n.t("top_bio_strain", strain, pct) else I18n.t("top_bio_threat", pct)
+			)
 			return
 		end
 	end

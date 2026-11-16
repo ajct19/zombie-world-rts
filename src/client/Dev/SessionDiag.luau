@@ -1998,6 +1998,37 @@ function Diag.start(Main: any)
 					tribes = tribes,
 				})
 				return "started " .. role
+			elseif sub == "arsenal" then
+				if Main.ui and Main.ui.arsenal then
+					if words[3] == "0" then
+						Main.ui.arsenal:close()
+					else
+						Main.ui.arsenal:open(words[4], "title")
+					end
+				end
+				return "arsenal " .. tostring(Main.ui and Main.ui.arsenal and Main.ui.arsenal.is_open)
+			elseif sub == "evolve" then
+				local lvl = if session._sim ~= nil and type(session._sim.evolve_strain) == "function"
+					then session._sim:evolve_strain()
+					else -1
+				return "evolve " .. tostring(lvl)
+			elseif sub == "audio" then
+				local ad = Main.audio
+				local total, loaded = 0, 0
+				if ad ~= nil and type(ad._voices) == "table" then
+					for _, v in ad._voices do
+						total += 1
+						if v.sound ~= nil and v.sound.IsLoaded then
+							loaded += 1
+						end
+					end
+				end
+				return HttpService:JSONEncode({
+					track = if ad ~= nil and ad._track ~= nil then ad._track else "",
+					track_loaded = (ad ~= nil and ad._current ~= nil and ad._current.IsLoaded == true) or false,
+					total_voices = total,
+					loaded_voices = loaded,
+				})
 			elseif sub == "reinforce" then
 				local ui = Main.ui
 				if ui and ui.ctx then
@@ -2082,6 +2113,10 @@ function Diag.start(Main: any)
 						and ui.title._general_btn ~= nil
 						and ui.title._general_btn.visible
 					) or false,
+					strain = (st ~= nil and st.strain_level) or 0,
+					arsenal_open = (ui ~= nil and ui.arsenal ~= nil and ui.arsenal.is_open == true) or false,
+					arsenal_title = (ui ~= nil and ui.arsenal ~= nil and ui.arsenal._title_lbl ~= nil and ui.arsenal._title_lbl.text)
+						or "",
 					lang = I18n.get(),
 					ui_errors = W.errors.caught,
 				})

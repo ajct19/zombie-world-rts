@@ -148,6 +148,28 @@ local function build(K_LIN: number): any
 	Rules.ZOMBIE_MUTATE_INTERVAL_TICKS = 250
 	Rules.ZOMBIE_MUTATE_MAX = 3
 	Rules.ZOMBIE_WIN_SHARE = 0.80
+	Rules.ZOMBIE_EVO_TICKS = { 600, 1300, 2100 }
+
+	function Rules.zombie_growth_mult(strain: number): number
+		if strain >= 3 then
+			return 1.5
+		elseif strain >= 1 then
+			return 1.25
+		end
+		return 1.0
+	end
+
+	function Rules.zombie_cap_mult(strain: number): number
+		return if strain >= 3 then 1.3 else 1.0
+	end
+
+	function Rules.zombie_leech(strain: number): number
+		return Rules.ZOMBIE_LEECH_SHARE + (if strain >= 2 then 0.15 else 0.0)
+	end
+
+	function Rules.zombie_tc_mult(strain: number): number
+		return if strain >= 2 then 0.8 else 1.0
+	end
 
 	function Rules.start_troops(kind: number, difficulty: number): number
 		if kind == KIND_TRIBE then

@@ -422,7 +422,8 @@ function UIRoot._toggle_lang(self)
 end
 
 function UIRoot._on_lang_changed(self)
-	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over, self.board, self.rotate, self.next_match }) do
+	for _, k in ipairs({ "title", "pause", "top", "spawn", "bar", "over", "board", "rotate_card", "next_match", "arsenal" }) do
+		local panel = (self :: any)[k]
 		if panel ~= nil and type(panel.refresh_locale) == "function" then
 			panel:refresh_locale()
 		end
@@ -1890,6 +1891,14 @@ function UIRoot._bind_state(self, s: any)
 			self.alert:flash_biohazard(I18n.t("alert_mutated"), I18n.t("alert_mutated_sub", nm), "bio", 4.2)
 			self:relayout_alert()
 			self.feed:toast(Defs.MSG_ALERT, I18n.t("alert_mutated_sub", nm), "skull")
+			self.top:refresh()
+			self.board:mark_dirty()
+		elseif ev_kind == "strain" then
+			local lvl = math.clamp(tonumber(owner_id) or 1, 1, 3)
+			self.alert:flash_biohazard(I18n.t("alert_strain_" .. lvl), I18n.t("alert_strain_sub_" .. lvl), "bio", 5.0)
+			self:relayout_alert()
+			self.feed:toast(Defs.MSG_ALERT, I18n.t("alert_strain_" .. lvl), "skull")
+			ctx:sfx("nuke_alarm")
 			self.top:refresh()
 			self.board:mark_dirty()
 		end
