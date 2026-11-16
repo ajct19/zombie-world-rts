@@ -3,6 +3,9 @@
 -- joined with the uploaded thumbnails (Assets/MapThumbs, keyed by the source map folder name). Falls
 -- back to the one built-in map when the registry is missing.
 local RS = game:GetService("ReplicatedStorage")
+local I18n: any = if typeof(game) == "Instance"
+	then require((RS:WaitForChild("Airfront"):WaitForChild("Data") :: any):WaitForChild("I18n"))
+	else nil
 
 local UIMaps = {}
 
@@ -86,7 +89,11 @@ end
 
 function UIMaps.name_of(id: string?): string
 	local e = UIMaps.get(id)
-	return if e then e.name else "World"
+	local fb = if e then e.name else "World"
+	if I18n ~= nil and type(I18n.map_name) == "function" then
+		return I18n.map_name(if e then e.id else id, fb)
+	end
+	return fb
 end
 
 --- A valid map id for `id` (the default when unknown).

@@ -642,7 +642,9 @@ end
 -- ---------------------------------------------------------------------------------------------
 
 function MapInput._pointer_down(self: any, index: any, pos: Vector2, slop: number)
-	local moving = self.rig:is_moving(MapInput.STOP_PX_PER_S)
+	local moving = if index == MOUSE
+		then self.rig._focus_active == true
+		else self.rig:is_moving(MapInput.STOP_PX_PER_S)
 	self.rig:halt()
 	self._press_active = true
 	self._press_index = index

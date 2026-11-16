@@ -775,18 +775,6 @@ function UICtx.lobby(self: any): { [string]: any }
 end
 
 function UICtx.send(self: any, intent: { [string]: any })
-	-- under a troop floor every attack is held to what may go, whoever built the order; one with
-	-- nothing to send is not sent at all
-	if self.troop_floor ~= nil and (intent.type == "attack" or intent.type == "boat") then
-		local share = math.min(tonumber(intent.ratio) or self.ratio, self:floor_share())
-		if share < self.ratio - 1e-6 then
-			self.floor_held:Fire()
-		end
-		if share <= 0.001 then
-			return
-		end
-		intent.ratio = share
-	end
 	table.insert(self.sent_log, { msec = UICtx.msec(), intent = intent })
 	if #self.sent_log > 64 then
 		table.remove(self.sent_log, 1)
@@ -1166,13 +1154,7 @@ end
 --- The most of the army any order may send now: what stands above `troop_floor` (a share of the
 --- army's cap that stays at home; nil = no floor, 1). Under 2% counts as nothing (0).
 function UICtx.floor_share(self: any): number
-	local f = self.troop_floor
-	local o = self:my()
-	if f == nil or o == nil or (o.max_troops or 0) <= 0 or (o.troops or 0) <= 0 then
-		return 1.0
-	end
-	local allowed = (o.troops - f * o.max_troops) / o.troops
-	return if allowed < 0.02 then 0.0 else math.min(allowed, 1.0)
+	return 1.0
 end
 
 --- The share of the army an order sends now: the slider's, trimmed to floor_share(). 0: nothing may go.
@@ -1317,12 +1299,18 @@ function UICtx.username(self: any): string
 		end
 	end
 	local d = self:session_call("local_display_name")
-	return if type(d) == "string" and d ~= "" then d else "Commander"
+	return if type(d) == "string" and d ~= "" then d else UICtx.t("commander_default")
 end
 
 -- =============================================================================================
 -- Owners
 -- =============================================================================================
+
+function UICtx.owner_name(self: any, id: number): string
+	local s = self.state
+	local raw = if s ~= nil and type(s.owner_name) == "function" then s:owner_name(id) else ""
+	return UICtx.data("I18n").owner_name(raw)
+end
 
 --- Progress toward victory: share of the land that is not fallout (the Sim wins at
 --- Rules.WIN_SHARE of contestable land minus fallout).
@@ -1378,38 +1366,40 @@ function UICtx.relation(self: any, id: number): string
 	if s == nil or id == 0 then
 		return ""
 	end
+	local I = UICtx.data("I18n")
 	if id == self:me() then
-		return "You"
+		return I.t("rel_you")
 	end
 	if type(s.is_infected) == "function" and s:is_infected(id) and not s:is_infected(self:me()) then
-		return UICtx.data("I18n").t("top_horde_tag")
+		return I.t("top_horde_tag")
 	end
 	if type(s.same_team) == "function" and s:same_team(self:me(), id) then
-		return "Teammate"
+		return I.t("rel_teammate")
 	end
 	if s:are_allies(self:me(), id) then
-		return "Ally"
+		return I.t("rel_ally")
 	end
 	if s:is_traitor(id) then
-		return "Traitor"
+		return I.t("rel_traitor")
 	end
 	if self:at_war(id) then
-		return "At war"
+		return I.t("rel_at_war")
 	end
-	return "Neutral"
+	return I.t("rel_neutral")
 end
 
 function UICtx.relation_color(_self: any, rel: string): Color3
 	local T = UICtx.mod("UITheme")
-	if rel == "You" then
+	local I = UICtx.data("I18n")
+	if rel == "You" or rel == I.t("rel_you") then
 		return T.AMBER
 	elseif rel == "HORDE" or rel == "ОРДА" then
 		return Color3.fromRGB(57, 255, 20)
-	elseif rel == "Ally" or rel == "Teammate" then
+	elseif rel == "Ally" or rel == "Teammate" or rel == I.t("rel_ally") or rel == I.t("rel_teammate") then
 		return T.GREEN
-	elseif rel == "Traitor" then
+	elseif rel == "Traitor" or rel == I.t("rel_traitor") then
 		return T.RED
-	elseif rel == "At war" then
+	elseif rel == "At war" or rel == I.t("rel_at_war") then
 		return T.ORANGE
 	end
 	return T.TEXT_2
@@ -1430,14 +1420,15 @@ function UICtx.at_war(self: any, id: number): boolean
 end
 
 function UICtx.kind_title(_self: any, kind: number): string
+	local I = UICtx.data("I18n")
 	if kind == Defs.KIND_TRIBE then
-		return "Tribe"
+		return I.t("kind_tribe")
 	elseif kind == Defs.KIND_HUMAN then
-		return "Commander"
+		return I.t("kind_commander")
 	elseif kind == Defs.KIND_ZOMBIE then
-		return UICtx.data("I18n").t("kind_zombie")
+		return I.t("kind_zombie")
 	end
-	return "Nation"
+	return I.t("kind_nation")
 end
 
 function UICtx.terrain_at(self: any, tile: number): number
@@ -1453,24 +1444,25 @@ function UICtx.terrain_title(self: any, tile: number): string
 	if s == nil or tile < 0 then
 		return ""
 	end
+	local I = UICtx.data("I18n")
 	if s:has_fallout(tile) then
-		return "Fallout"
+		return I.t("ter_fallout")
 	end
 	local t = self:terrain_at(tile)
 	if t == Defs.T_OCEAN then
-		return "Ocean"
+		return I.t("ter_ocean")
 	elseif t == Defs.T_LAKE then
-		return "Lake"
+		return I.t("ter_lake")
 	elseif t == Defs.T_PLAINS then
-		return "Plains"
+		return I.t("ter_plains")
 	elseif t == Defs.T_HIGHLAND then
-		return "Highland"
+		return I.t("ter_highland")
 	elseif t == Defs.T_MOUNTAIN then
-		return "Mountains"
+		return I.t("ter_mountains")
 	elseif t == Defs.T_TUNDRA then
-		return "Tundra"
+		return I.t("ter_tundra")
 	elseif t == Defs.T_ICECAP then
-		return "Ice cap"
+		return I.t("ter_icecap")
 	end
 	return ""
 end

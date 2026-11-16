@@ -191,8 +191,12 @@ function UIRoot.setup(self, session: any, world: any, audio: any)
 			local pack = self.starter ~= nil and self.starter.bought_at ~= nil and os.clock() - self.starter.bought_at < 5
 			if self.arsenal ~= nil and not self.arsenal.is_open and not pack then
 				local it = ArsenalData.item(key)
+				local I18n = UICtx.data("I18n")
+				local tk = "ars_" .. key .. "_title"
+				local loc = I18n.t(tk)
+				local item_name = if loc ~= tk then loc elseif it ~= nil then it.title else I18n.t("ars_item_fallback")
 				ctx:sfx("unlock")
-				self:_on_notice((if it ~= nil then it.title else "Arsenal item") .. " unlocked!", 0)
+				self:_on_notice(I18n.t("ars_unlocked_fmt", item_name), 0)
 			end
 		end)
 		self:_sig(session, "inventory_changed", function()
@@ -335,13 +339,9 @@ function UIRoot._check_new_player(self, forced: boolean?)
 		return
 	end
 	if not forced then
-		if UICtx.IS_ROBLOX and workspace:GetAttribute("AF_DIAG") == true then
-			return
-		end
-		local stats = if type(s.load_settings) == "function" then s:load_settings("stats") else nil
-		if not TutorialData.is_new(ctx.settings, stats) then
-			return
-		end
+		-- Always land on BioFront's Title Screen so Zombie Plague is front-and-center on first load;
+		-- players can still launch the tutorial manually via PauseMenu ("Replay as new player").
+		return
 	end
 	self._tutorial_at = UICtx.msec() + UIRoot.TUTORIAL_DELAY_S * 1000
 end
@@ -377,7 +377,12 @@ function UIRoot.start_tutorial(self)
 	ctx:session_call("start_solo", {
 		TutorialData.DIFFICULTY,
 		UIMaps.DEFAULT_ID,
-		{ tribes = TutorialData.TRIBES, countdown_ticks = TutorialData.COUNTDOWN_TICKS },
+		{
+			tribes = TutorialData.TRIBES,
+			countdown_ticks = TutorialData.COUNTDOWN_TICKS,
+			game_mode = "zombie",
+			zombie_role = "survivor",
+		},
 	})
 end
 
@@ -422,11 +427,45 @@ function UIRoot._toggle_lang(self)
 end
 
 function UIRoot._on_lang_changed(self)
-	for _, k in ipairs({ "title", "pause", "top", "spawn", "bar", "over", "board", "rotate_card", "next_match", "arsenal" }) do
+	local I18n = UICtx.data("I18n")
+	for _, k in ipairs({
+		"title",
+		"pause",
+		"top",
+		"spawn",
+		"bar",
+		"over",
+		"board",
+		"rotate_card",
+		"next_match",
+		"arsenal",
+		"attacks",
+		"coach",
+		"tutorial",
+		"alert",
+		"map_picker",
+		"target_card",
+		"unit_card",
+	}) do
 		local panel = (self :: any)[k]
 		if panel ~= nil and type(panel.refresh_locale) == "function" then
 			panel:refresh_locale()
 		end
+	end
+	if self._spec_title ~= nil then
+		self._spec_title:set_text(I18n.t("spec_title"))
+	end
+	if self._spec_sub ~= nil then
+		self._spec_sub:set_text(I18n.t("spec_sub"))
+	end
+	if self._spec_take ~= nil then
+		self._spec_take:set_text(I18n.t("spec_take"))
+	end
+	if self._spec_again ~= nil then
+		self._spec_again:set_text(I18n.t("spec_again"))
+	end
+	if self._spec_leave ~= nil then
+		self._spec_leave:set_text(I18n.t("spec_leave"))
 	end
 	if self.title ~= nil then
 		self.title:set_map_name(UIMaps.name_of(UIMaps.valid(self.ctx:setting("map_id", UIMaps.DEFAULT_ID))))
@@ -1296,7 +1335,6 @@ function UIRoot._build(self)
 	interact:connect_input()
 	self:_hook_buttons(root)
 	if UICtx.IS_ROBLOX then
-		local RunService = game:GetService("RunService")
 		self._step_name = "AirfrontUI_" .. tostring(math.random(1, 1e9))
 		local perf = { frames = 0, process = 0.0, kit = 0.0, max = 0.0 }
 		self._perf = perf
@@ -1304,7 +1342,7 @@ function UIRoot._build(self)
 		self.telemetry.ui_perf = perf
 		-- (the frame's dt: a Studio film steps it)
 		local FrameClock = require("../Map/FrameClock") :: any
-		RunService:BindToRenderStep(self._step_name, Enum.RenderPriority.Camera.Value + 10, function(real_dt)
+		FrameClock.bind(self._step_name, Enum.RenderPriority.Camera.Value + 10, function(real_dt)
 			local dt = FrameClock.dt(real_dt)
 			local t0 = os.clock()
 			-- _process guards each component itself; this outer guard keeps W.step (tweens, timers,
@@ -1386,13 +1424,15 @@ function UIRoot._build_spectate_pill(self)
 	eye.size_flags_vertical = W.SHRINK_CENTER
 	h:add_child(eye)
 	local v = UITheme.vbox(0)
+	local I18n = UICtx.data("I18n")
 	v.size_flags_vertical = W.SHRINK_CENTER
-	v:add_child(UITheme.label("SPECTATING", 13, 800, UITheme.TEXT, 2))
-	self._spec_sub = UITheme.label("Drag to look around · click a nation for details", 11, 500, UITheme.TEXT_2)
+	self._spec_title = UITheme.label(I18n.t("spec_title"), 13, 800, UITheme.TEXT, 2)
+	v:add_child(self._spec_title)
+	self._spec_sub = UITheme.label(I18n.t("spec_sub"), 11, 500, UITheme.TEXT_2)
 	v:add_child(self._spec_sub)
 	h:add_child(v)
 	-- solo: take over the nation that conquered you (Takeover.luau; hidden without an offer)
-	self._spec_take = UITheme.button("Take over", "PrimaryButton", "robux", 44.0)
+	self._spec_take = UITheme.button(I18n.t("spec_take"), "PrimaryButton", "robux", 44.0)
 	self._spec_take:set_font_size(13)
 	self._spec_take.size_flags_vertical = W.SHRINK_CENTER
 	self._spec_take.pressed:Connect(function()
@@ -1402,7 +1442,7 @@ function UIRoot._build_spectate_pill(self)
 	end)
 	self._spec_take:set_visible(false)
 	h:add_child(self._spec_take)
-	self._spec_again = UITheme.button("Play again", "PrimaryButton", "play", 44.0)
+	self._spec_again = UITheme.button(I18n.t("spec_again"), "PrimaryButton", "play", 44.0)
 	self._spec_again:set_font_size(13)
 	self._spec_again.pressed:Connect(function()
 		self:_restart_solo(
@@ -1411,7 +1451,7 @@ function UIRoot._build_spectate_pill(self)
 	end)
 	self._spec_again.size_flags_vertical = W.SHRINK_CENTER
 	h:add_child(self._spec_again)
-	local b = UITheme.button("Title", "GlassButton", "exit", 44.0)
+	local b = UITheme.button(I18n.t("spec_leave"), "GlassButton", "exit", 44.0)
 	self._spec_leave = b
 	b:set_font_size(13)
 	b.size_flags_vertical = W.SHRINK_CENTER
@@ -2290,19 +2330,20 @@ function UIRoot._update_input_gate(self)
 		self.hud.visible and self._screen ~= "spawn" and not ctx:alive_player() and not self.over.is_open
 	)
 	self._spec_again:set_visible(ctx:mode() == UICtx.MODE_SOLO)
+	local I18n = UICtx.data("I18n")
 	-- a public match's own server: leaving goes back to a hub (the title with the lobby list)
-	self._spec_leave:set_text(if ctx:mode() == UICtx.MODE_MULTI then "Leave" else "Title")
+	self._spec_leave:set_text(I18n.t(if ctx:mode() == UICtx.MODE_MULTI then "spec_leave_multi" else "spec_leave"))
 	local killer = self._stats.killer or 0
 	if ctx:mode() == UICtx.MODE_MULTI and ctx:me() == 0 and ctx.state ~= nil then
-		self._spec_sub:set_text("Watching this match · drag to look around, click a nation")
+		self._spec_sub:set_text(I18n.t("spec_watching_mp"))
 	elseif self._stats.elim and ctx.state ~= nil then
 		self._spec_sub:set_text(
 			if killer ~= 0
-				then string.format("Conquered by %s · the war goes on without you", ctx.state:owner_name(killer))
-				else "Your nation fell · the war goes on without you"
+				then I18n.t("spec_conquered_by", ctx:owner_name(killer))
+				else I18n.t("spec_fell")
 		)
 	else
-		self._spec_sub:set_text("Drag to look around · click a nation for details")
+		self._spec_sub:set_text(I18n.t("spec_sub"))
 	end
 end
 
@@ -2699,7 +2740,7 @@ end
 --- Tear down (tests): disconnect everything and free the GUI.
 function UIRoot.destroy(self)
 	if UICtx.IS_ROBLOX and self._step_name then
-		game:GetService("RunService"):UnbindFromRenderStep(self._step_name)
+		(require("../Map/FrameClock") :: any).unbind(self._step_name)
 	end
 	for _, c in ipairs(self._sconns) do
 		c:Disconnect()

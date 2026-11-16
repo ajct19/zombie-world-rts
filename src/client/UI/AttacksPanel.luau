@@ -13,6 +13,7 @@ local UITheme = require("./UITheme")
 local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
 local Signal = UITheme.core("Signal")
+local I18n = require("./UICtx").data("I18n")
 
 local AttacksPanel = W.class(W.Control)
 
@@ -119,8 +120,8 @@ function Row.set_attack(self, a: any, touch: boolean)
 		T.set_swatch_color(self.sw, s:owner_color(other))
 	end
 	-- a retreating attack says so and can't be recalled again
-	local name = if other ~= 0 then s:owner_name(other) else "Expansion"
-	self.name_l:set_text(if a.retreating then name .. " (retreating…)" else name)
+	local name = if other ~= 0 then I18n.owner_name(s:owner_name(other)) else I18n.t("atk_expansion")
+	self.name_l:set_text(if a.retreating then name .. I18n.t("atk_retreating") else name)
 	T.set_font_color(self.name_l, if incoming then Color3.new(1.0, 0.82, 0.84) else T.TEXT)
 	self.troops_l:set_text(T.fmt_troops(a.troops))
 	T.set_font_color(self.troops_l, if incoming then T.RED else T.TEXT)
@@ -181,7 +182,7 @@ function AttacksPanel.new(c: any)
 	self._icon = T.icon_rect("attack", 13.0, T.AMBER)
 	self._icon.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(self._icon)
-	self._title = T.label("ATTACKS", 12, 800, T.TEXT, 2)
+	self._title = T.label(I18n.t("atk_title"), 12, 800, T.TEXT, 2)
 	head:add_child(self._title)
 	local sp = W.Control.new()
 	sp.size_flags_horizontal = W.EXPAND_FILL
@@ -422,14 +423,14 @@ function AttacksPanel.refresh(self)
 	local outc = #list - inc
 	local parts = {}
 	if outc > 0 then
-		table.insert(parts, string.format("%d out", outc))
+		table.insert(parts, I18n.t("atk_out_fmt", outc))
 	end
 	if inc > 0 then
-		table.insert(parts, string.format("%d in", inc))
+		table.insert(parts, I18n.t("atk_in_fmt", inc))
 	end
 	local ctext = table.concat(parts, "  ·  ")
 	if ctx.compact and self.collapsed then
-		ctext = if inc == 0 then tostring(#list) else string.format("%d · %d in", #list, inc)
+		ctext = if inc == 0 then tostring(#list) else I18n.t("atk_more_in_fmt", #list, inc)
 	end
 	self._count:set_text(ctext)
 	T.set_font_color(
@@ -443,11 +444,19 @@ function AttacksPanel.refresh(self)
 	self._icon:set_icon(if inc > 0 then "target" else "attack")
 	self._icon:set_color(if inc > 0 then T.RED else T.AMBER)
 	self._more:set_visible(#list > shown and not self.collapsed)
-	self._more:set_text(string.format("+%d more", #list - shown))
+	self._more:set_text(I18n.t("atk_more_fmt", #list - shown))
 	self.panel:reset_size()
 	if not was then
 		W.pop_in(self.panel, 0.0, 0.96, 0.3)
 	end
+end
+
+function AttacksPanel.refresh_locale(self)
+	if self._title ~= nil then
+		self._title:set_text(I18n.t("atk_title"))
+	end
+	self:mark_dirty()
+	self:refresh()
 end
 
 --- Per frame (GDScript _process).

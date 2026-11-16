@@ -620,10 +620,19 @@ local ZOMBIE_MASK = buffer.create(16 * 16)
 do
 	for y = 0, 15 do
 		for x = 0, 15 do
-			local v1 = (x + y) % 8 == 0 or (x + y * 2) % 11 == 0
-			local v2 = (x * 2 - y + 32) % 13 == 0 and (x + y) % 3 ~= 0
-			local p = (x % 7 == 3 and y % 7 == 4) or (x % 11 == 8 and y % 9 == 2)
-			buffer.writeu8(ZOMBIE_MASK, y * 16 + x, if p then 2 elseif (v1 or v2) then 1 else 0)
+			local v1 = (x + y) % 5 == 0 or (x - y + 32) % 7 == 0
+			local v2 = (x + y * 2) % 9 == 0 or (x * 2 - y + 32) % 11 == 0
+			local p = ((x % 6 == 2 or x % 6 == 3) and (y % 6 == 2 or y % 6 == 3))
+			local c = (x % 9 == 7 and y % 8 == 5)
+			local idx = 0
+			if c then
+				idx = 3
+			elseif p then
+				idx = 2
+			elseif v1 or v2 then
+				idx = 1
+			end
+			buffer.writeu8(ZOMBIE_MASK, y * 16 + x, idx)
 		end
 	end
 end
@@ -635,8 +644,8 @@ local function make_zombie_skin(): any
 		w = 16,
 		h = 16,
 		scale = 1,
-		fills = { 0, 0 },
-		fills_hi = { 0, 0 },
+		fills = { 0, 0, 0 },
+		fills_hi = { 0, 0, 0 },
 	}
 end
 
@@ -734,19 +743,26 @@ function MapSurface.refresh_palette(self: MapSurface)
 				sk = make_zombie_skin()
 				skins[id] = sk
 			end
-			local nr, ng, nb = 0.06 + r * 0.16, 0.14 + g * 0.18, 0.07 + b * 0.14
-			local za = math.min(255, alpha + 28)
+			-- Deep dark necrotic violet-charcoal base + glowing bio-green borders and 3 dense creep layers
+			local nr = 0.09 + r * 0.10
+			local ng = 0.04 + g * 0.06
+			local nb = 0.14 + b * 0.10
+			local za = math.min(255, alpha + 58)
 			writeu32(self.pal_fill, id * 4, pack(nr * 255, ng * 255, nb * 255, za))
 			writeu32(
 				self.pal_fill_hi,
 				id * 4,
 				pack(contrast(nr, hi_k) * 255, contrast(ng, hi_k) * 255, contrast(nb, hi_k) * 255, za)
 			)
+			writeu32(self.pal_border, id * 4, pack(62, 255, 48, 255))
+			writeu32(self.pal_border_hi, id * 4, pack(170, 255, 110, 255))
 			if sk ~= nil then
-				sk.fills[1] = pack(57, 255, 20, 225)
-				sk.fills_hi[1] = pack(130, 255, 95, 240)
-				sk.fills[2] = pack(182, 255, 42, 235)
-				sk.fills_hi[2] = pack(225, 255, 120, 245)
+				sk.fills[1] = pack(57, 255, 20, 245)
+				sk.fills_hi[1] = pack(140, 255, 95, 255)
+				sk.fills[2] = pack(198, 255, 36, 250)
+				sk.fills_hi[2] = pack(235, 255, 130, 255)
+				sk.fills[3] = pack(255, 46, 99, 250)
+				sk.fills_hi[3] = pack(255, 115, 155, 255)
 			end
 		else
 			if skins ~= nil and sk ~= nil and sk.zombie then

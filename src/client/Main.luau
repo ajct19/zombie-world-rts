@@ -59,6 +59,14 @@ local function optional(parent: Instance?, path: { string }): any
 	return mod
 end
 
+local I18n = optional(ReplicatedStorage:FindFirstChild("Airfront"), { "Data", "I18n" })
+local function loc(key: string, fallback: string): string
+	if type(I18n) == "table" and type(I18n.t) == "function" then
+		return I18n.t(key)
+	end
+	return fallback
+end
+
 local call_warned: { [string]: boolean } = {}
 
 --- Calls obj:method(...) if it exists. A failing view / UI call is reported once per method and never
@@ -372,7 +380,7 @@ local function build_hud(player: Player)
 		h,
 		"music",
 		if audio:is_music_enabled() then "music_on" else "music_off",
-		"Music (M)",
+		loc("tb_music", "Music (M)"),
 		1,
 		toggle_music
 	)
@@ -381,20 +389,38 @@ local function build_hud(player: Player)
 		music.set_icon(if on then "music_on" else "music_off")
 	end)
 	-- (2026-10-25: "Help & Credits", the window ends with the credits, licence and source)
-	make_button(h, "help", "help", "Help & Credits (H)", 2, function()
+	make_button(h, "help", "help", loc("tb_help", "Help & Credits (H)"), 2, function()
 		call(Main.ui, "toggle_help")
 	end)
-	make_button(h, "leaderboard", "leaderboard", "Leaderboard (Tab)", 3, function()
+	make_button(h, "leaderboard", "leaderboard", loc("tb_leaderboard", "Leaderboard (Tab)"), 3, function()
 		call(Main.ui, "toggle_leaderboard")
 	end)
-	make_button(h, "home", "globe", "Center on your nation (Home)", 4, focus_home)
+	make_button(h, "home", "globe", loc("tb_home", "Center on your nation (Home)"), 4, focus_home)
 	-- settings (2026-10-07): music, the border pops, labels; on the title too
-	make_button(h, "settings", "settings", "Settings", 5, function()
+	make_button(h, "settings", "settings", loc("tb_settings", "Settings"), 5, function()
 		call(Main.ui, "open_settings")
 	end)
-	make_button(h, "menu", "exit", "Game menu", 6, function()
+	make_button(h, "menu", "exit", loc("tb_menu", "Game menu"), 6, function()
 		call(Main.ui, "open_pause_menu")
 	end)
+	if type(I18n) == "table" and I18n.changed ~= nil and type(I18n.changed.Connect) == "function" then
+		I18n.changed:Connect(function()
+			local fallbacks = {
+				music = "Music (M)",
+				help = "Help & Credits (H)",
+				leaderboard = "Leaderboard (Tab)",
+				home = "Center on your nation (Home)",
+				settings = "Settings",
+				menu = "Game menu",
+			}
+			for id, fb in pairs(fallbacks) do
+				local e = h.buttons[id]
+				if e ~= nil then
+					e.tooltip = loc("tb_" .. id, fb)
+				end
+			end
+		end)
+	end
 	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(layout_hud)
 	-- (a resized window may change layouts: the row follows once the UI has laid itself out)
 	local cam = workspace.CurrentCamera

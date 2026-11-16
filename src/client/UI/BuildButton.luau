@@ -248,44 +248,49 @@ end
 
 function BuildButton.hint_spec(self): { [string]: any }
 	local R = UIRules()
+	local rules = (self.ctx and self.ctx.rules) or R
 	local c = self._av.cost or 0
 	local nuke = R.is_nuke(self.kind)
-	local rows: { any } = { { "Cost", if c > 0 then UITheme.fmt_cost(c) .. " gold" else "Free", UITheme.GOLD } }
+	local rows: { any } = {
+		{ I18n.t("tt_cost"), if c > 0 then I18n.t("tt_gold_fmt", UITheme.fmt_cost(c)) else I18n.t("free"), UITheme.GOLD },
+	}
 	if self.kind == "reinforce" then
 		local o = self.ctx:my()
 		local troops = if o ~= nil
 			then UITheme.core("Rules").reinforce_troops(o.troops or 0, o.max_troops or 0)
 			else 0
-		table.insert(rows, { "Brings", UITheme.fmt_troops(troops) .. " troops", UITheme.TEXT })
+		table.insert(rows, { I18n.t("tt_brings"), I18n.t("tt_troops_fmt", UITheme.fmt_troops(troops)), UITheme.TEXT })
 	elseif not nuke then
-		table.insert(rows, { "Owned", tostring(self._owned), UITheme.TEXT })
+		table.insert(rows, { I18n.t("tt_owned"), tostring(self._owned), UITheme.TEXT })
 	else
-		table.insert(rows, { "Blast radius", R.blast_text(self.kind), UITheme.TEXT })
+		table.insert(rows, { I18n.t("tt_blast"), R.blast_text(self.kind), UITheme.TEXT })
 	end
 	local item = R.arsenal_item(self.kind)
 	if self._av.arsenal ~= nil and item ~= nil then
 		-- locked: what unlocks it
 		rows = {}
 		if item.stars ~= nil then
-			table.insert(rows, { "Unlock", UICtx.commas(item.stars) .. " Stars", UITheme.GOLD })
+			table.insert(rows, { I18n.t("tt_unlock"), I18n.t("tt_stars_fmt", UICtx.commas(item.stars)), UITheme.GOLD })
 		end
 	end
 	local spec: { [string]: any } = {
-		title = R:title_of(self.kind),
+		title = rules:title_of(self.kind),
 		badge = if not self.ctx.touch then self.hotkey else "",
 		badge_color = UITheme.TEXT_2,
-		body = R:blurb_of(self.kind),
+		body = rules:blurb_of(self.kind),
 		rows = rows,
 	}
 	if self._av.arsenal ~= nil then
-		spec.hint = "Locked: " .. (if self.ctx.touch then "tap" else "click") .. " to unlock it in the Arsenal"
+		spec.hint = I18n.t(if self.ctx.touch then "bb_locked_tap" else "bb_locked_click")
 		spec.hint_color = UITheme.GOLD
 		spec.hint_icon = "lock"
 	elseif self._av.ok then
-		spec.hint = if self.kind == "reinforce"
-			then "Click to call them in"
-			elseif nuke then "Click, then pick a target"
-			else "Click, then choose a spot on your land"
+		spec.hint = I18n.t(
+			if self.kind == "reinforce"
+				then (if rules:is_zombie_survivor() then "vaccine_ready" else "bb_call_reinforce")
+				elseif nuke then "bb_pick_target"
+				else "bb_pick_spot"
+		)
 		spec.hint_color = UITheme.CYAN
 		spec.hint_icon = "target"
 	else
@@ -338,6 +343,7 @@ function BuildButton._redraw(self)
 		return
 	end
 	local R = UIRules()
+	local rules = (self.ctx and self.ctx.rules) or R
 	local size = self.size
 	local ok = self._av.ok == true
 	local locked = self._av.locked == true
@@ -352,7 +358,7 @@ function BuildButton._redraw(self)
 	if nuke and ok then
 		bg = UITheme.c(UITheme.RED, 0.07)
 		border = UITheme.c(UITheme.RED, 0.22)
-	elseif self.kind == "reinforce" and R:is_zombie_survivor() and ok then
+	elseif self.kind == "reinforce" and rules:is_zombie_survivor() and ok then
 		bg = UITheme.c(UITheme.CYAN, 0.1)
 		border = UITheme.c(UITheme.CYAN, 0.35)
 	end
@@ -403,7 +409,7 @@ function BuildButton._redraw(self)
 	local fs = math.max(11, UITheme.min_font_size)
 	local c = self._av.cost or 0
 	local is_free = c == 0
-	local is_vax = self.kind == "reinforce" and R:is_zombie_survivor()
+	local is_vax = self.kind == "reinforce" and rules:is_zombie_survivor()
 	local ctext = if c > 0 then UITheme.fmt_cost(c) elseif is_free then I18n.t("free") else "-"
 	local ccol: any = UITheme.GOLD
 	if locked then
@@ -450,7 +456,7 @@ function BuildButton._redraw(self)
 			Enum.TextXAlignment.Center,
 			math.max(12, UITheme.min_font_size),
 			600,
-			R:short_of(self.kind),
+			rules:short_of(self.kind),
 			ncol
 		)
 	else

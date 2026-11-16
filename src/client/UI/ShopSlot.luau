@@ -26,6 +26,7 @@ local function airfront(folder: string, name: string): any
 	return (require :: any)("../../shared/" .. folder .. "/" .. name)
 end
 local Catalog = airfront("Data", "Arsenal")
+local I18n = airfront("Data", "I18n")
 local Art: any = (function()
 	local ok, m = pcall(airfront, "Assets", "ArsenalArt")
 	return if ok and type(m) == "table" then m else {}
@@ -140,7 +141,7 @@ function ShopSlot._build(self)
 	self._cap = new("TextLabel", {
 		Name = "Caption",
 		BackgroundTransparency = 1,
-		Text = "SHOP",
+		Text = I18n.t("shop_cap"),
 		FontFace = FONT_H,
 		TextColor3 = INK,
 		AnchorPoint = Vector2.new(0.5, 1),
@@ -351,6 +352,12 @@ function ShopSlot._process(self, dt: number)
 		end
 	end
 	self._body.Rotation = rot
+end
+
+function ShopSlot.refresh_locale(self)
+	if self._cap ~= nil then
+		self._cap.Text = I18n.t("shop_cap")
+	end
 end
 
 return ShopSlot

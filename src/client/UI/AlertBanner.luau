@@ -9,6 +9,7 @@
 local UITheme = require("./UITheme")
 local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
+local I18n = require("./UICtx").data("I18n")
 
 local AlertBanner = W.class(W.Control)
 
@@ -50,7 +51,7 @@ function AlertBanner.new(c: any)
 	row:add_child(self._disc)
 	local v = T.vbox(0)
 	v.size_flags_vertical = W.SHRINK_CENTER
-	self._title = T.label("INCOMING NUKE", 15, 800, RED_TITLE, 3)
+	self._title = T.label(I18n.t("al_incoming_nuke"), 15, 800, RED_TITLE, 3)
 	v:add_child(self._title)
 	self._detail = T.label("", 12, 500, Color3.new(1.0, 0.88, 0.88))
 	v:add_child(self._detail)
@@ -141,9 +142,9 @@ function AlertBanner._show_green(self, last: boolean)
 	self._green = 1.6
 	self:set_visible(true)
 	self:set_modulate_a(1.0)
-	self._title:set_text("INTERCEPTED!")
+	self._title:set_text(I18n.t("al_intercepted"))
 	self._title:set_color(Color3.new(0.6, 1.0, 0.72))
-	self._detail:set_text("Shot down by a SAM" .. (if last then "" else " · more incoming"))
+	self._detail:set_text(I18n.t("al_shot_sam") .. (if last then "" else I18n.t("al_more_incoming")))
 	self.panel:set_tint(T.rgba(0.03, 0.2, 0.09, 0.9))
 	self.panel:set_border(T.c(T.GREEN, 0.9))
 	self._disc:add_theme_stylebox_override("panel", T.flat(T.c(T.GREEN, 0.25), 17, T.GREEN, 1))
@@ -250,15 +251,28 @@ function AlertBanner._refresh(self)
 		return
 	end
 	local secs = math.max(0, math.ceil(soonest / Defs.TICK_RATE))
-	local what = (if kind >= 0 then Defs.NUKE_TITLES[kind] else nil) or "Nuke"
+	local what = (if kind >= 0 then I18n.nuke_title(kind) else "")
+	if what == "" then
+		what = I18n.t("rad_nuke")
+	end
+	local sender = I18n.owner_name(s:owner_name(from))
 	if count > 1 then
-		self._title:set_text(string.format("INCOMING NUKES ×%d", count))
-		self._detail:set_text(string.format("First impact in %ds · from %s", secs, s:owner_name(from)))
+		self._title:set_text(I18n.t("al_incoming_nukes", count))
+		self._detail:set_text(I18n.t("al_first_impact", secs, sender))
 	else
-		self._title:set_text("INCOMING NUKE")
-		self._detail:set_text(string.format("%s from %s · impact in %ds", what, s:owner_name(from), secs))
+		self._title:set_text(I18n.t("al_incoming_nuke"))
+		self._detail:set_text(I18n.t("al_single_impact", what, sender, secs))
 	end
 	self.panel:reset_size()
+end
+
+function AlertBanner.refresh_locale(self)
+	self._stale = true
+	if next(self._incoming) ~= nil then
+		self:_refresh()
+	elseif self._green <= 0 and self._bio <= 0 then
+		self._title:set_text(I18n.t("al_incoming_nuke"))
+	end
 end
 
 --- Per frame (GDScript _process).

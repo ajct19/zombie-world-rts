@@ -177,7 +177,8 @@ function Row.set_row(self, o: any, r: number)
 		end
 	end
 	local is_z = type(s.is_infected) == "function" and s:is_infected(o.id)
-	self.name_l:set_text(if is_z then string.format("[%s] %s", I18n.t("top_horde_tag"), o.name) else o.name)
+	local disp = I18n.owner_name(o.name)
+	self.name_l:set_text(if is_z then string.format("[%s] %s", I18n.t("top_horde_tag"), disp) else disp)
 	self.land:set_text(T.fmt_pct(s:land_share(o.id)))
 	self.troops:set_text(T.fmt_troops(o.troops))
 	-- Threat context: a neighbour with over 3x our army reads red.
@@ -275,14 +276,15 @@ function Leaderboard.new(c: any)
 	hm:add_theme_constant_override("margin_right", 4)
 	hm:add_child(self._header)
 	self._header:add_child(T.icon_rect("leaderboard", 14.0, T.AMBER))
-	self._header:add_child(T.label("LEADERBOARD", 12, 800, T.TEXT, 2))
+	self._title_l = T.label(I18n.t("lb_title"), 12, 800, T.TEXT, 2)
+	self._header:add_child(self._title_l)
 	local sp = W.Control.new()
 	sp.size_flags_horizontal = W.EXPAND_FILL
 	sp:set_mouse_filter(W.MOUSE_IGNORE)
 	self._header:add_child(sp)
 	-- game admins only: show just the real players
 	self.humans_only = false
-	local hf = T.button("HUMANS", "ChipButton", "", 22.0)
+	local hf = T.button(I18n.t("lb_humans"), "ChipButton", "", 22.0)
 	hf.toggle_mode = true
 	hf:set_font_size(10)
 	hf.pressed:Connect(function()
@@ -319,15 +321,18 @@ function Leaderboard.new(c: any)
 	c1:set_min_size(Vector2.new(22, 0))
 	c1.horizontal_alignment = W.ALIGN_RIGHT
 	self._cols:add_child(c1)
-	local c2 = T.caption("Nation", 10)
+	local c2 = T.caption(I18n.t("lb_nation"), 10)
+	self._col_nation = c2
 	c2.size_flags_horizontal = W.EXPAND_FILL
 	c2:set_min_size(Vector2.new(18, 0))
 	self._cols:add_child(c2)
-	local c3 = T.caption("Land", 10)
+	local c3 = T.caption(I18n.t("lb_land"), 10)
+	self._col_land = c3
 	c3:set_min_size(Vector2.new(50, 0))
 	c3.horizontal_alignment = W.ALIGN_RIGHT
 	self._cols:add_child(c3)
-	local c4 = T.caption("Troops", 10)
+	local c4 = T.caption(I18n.t("lb_troops"), 10)
+	self._col_troops = c4
 	c4:set_min_size(Vector2.new(46, 0))
 	c4.horizontal_alignment = W.ALIGN_RIGHT
 	self._cols:add_child(c4)
@@ -566,10 +571,10 @@ function Leaderboard.refresh(self)
 	self._pin_sep:set_visible(#pins > 0)
 	self._pin_more:set_visible(more > 0)
 	if more > 0 then
-		self._pin_more:set_text(string.format("+%d more %s", more, if more == 1 then "human" else "humans"))
+		self._pin_more:set_text(I18n.t(if more == 1 then "lb_more_one" else "lb_more_many", more))
 	end
 	self:_refresh_teams()
-	self._count:set_text(string.format(if humans_only then "%d humans" else "%d alive", #ranking))
+	self._count:set_text(I18n.t(if humans_only then "lb_cnt_humans" else "lb_cnt_alive", #ranking))
 	self:_set_pill(my_rank, ranking[1])
 	self.panel:reset_size()
 end
@@ -580,11 +585,11 @@ function Leaderboard._set_pill(self, my_rank: number, leader: any)
 	local ctx = self.ctx
 	local T = UITheme
 	local s = ctx.state
-	local text = "Leaderboard"
+	local text = I18n.t("lb_pill")
 	if my_rank > 0 then
 		text = string.format("#%d  ·  %s", my_rank, T.fmt_pct(s:land_share(ctx:me())))
 	elseif leader ~= nil then
-		local nm = leader.name
+		local nm = I18n.owner_name(leader.name)
 		if utf8.len(nm) and (utf8.len(nm) :: number) > 10 then
 			local cut = utf8.offset(nm, 10)
 			nm = string.sub(nm, 1, (cut or 10) - 1) .. "…"
@@ -654,6 +659,21 @@ function Leaderboard._refresh_teams(self)
 end
 
 function Leaderboard.refresh_locale(self)
+	if self._title_l ~= nil then
+		self._title_l:set_text(I18n.t("lb_title"))
+	end
+	if self._humans_btn ~= nil then
+		self._humans_btn:set_text(I18n.t("lb_humans"))
+	end
+	if self._col_nation ~= nil then
+		self._col_nation:set_text(I18n.t("lb_nation"))
+	end
+	if self._col_land ~= nil then
+		self._col_land:set_text(I18n.t("lb_land"))
+	end
+	if self._col_troops ~= nil then
+		self._col_troops:set_text(I18n.t("lb_troops"))
+	end
 	self:mark_dirty()
 	self:refresh()
 end

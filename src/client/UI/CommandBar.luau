@@ -105,7 +105,7 @@ function CommandBar._build_sections(self)
 	local nv = T.vbox(0)
 	nv.size_flags_vertical = W.SHRINK_CENTER
 	local name_row = T.hbox(6)
-	self._name = T.label("Commander", 15, 700)
+	self._name = T.label(I18n.t("commander_default"), 15, 700)
 	self._name.text_overrun_behavior = W.OVERRUN_ELLIPSIS
 	self._name:set_min_size(Vector2.new(96, 0))
 	self._name.size_flags_horizontal = W.EXPAND_FILL
@@ -123,7 +123,8 @@ function CommandBar._build_sections(self)
 	self._troops_box = T.vbox(3)
 	local tr = T.hbox(6)
 	tr:add_child(T.icon_rect("troops", 12.0, T.TEXT_3))
-	tr:add_child(T.caption("Troops"))
+	self._troops_cap_l = T.caption(I18n.t("bar_troops_cap"))
+	tr:add_child(self._troops_cap_l)
 	tr:add_child(spacer())
 	self._growth = T.label("+0/s", 11, 700, T.GREEN)
 	tr:add_child(self._growth)
@@ -152,7 +153,8 @@ function CommandBar._build_sections(self)
 	self._gold_box = T.vbox(3)
 	local gr = T.hbox(6)
 	gr:add_child(T.icon_rect("gold", 12.0, T.TEXT_3))
-	gr:add_child(T.caption("Gold"))
+	self._gold_cap_l = T.caption(I18n.t("bar_gold_cap"))
+	gr:add_child(self._gold_cap_l)
 	gr:add_child(spacer())
 	self._income = T.label("+0/s", 11, 700, T.GREEN)
 	gr:add_child(self._income)
@@ -167,7 +169,8 @@ function CommandBar._build_sections(self)
 	self._ratio_box = T.vbox(2)
 	local rr = T.hbox(6)
 	rr:add_child(T.icon_rect("attack", 12.0, T.TEXT_3))
-	rr:add_child(T.caption("Attack"))
+	self._atk_cap_l = T.caption(I18n.t("bar_attack_cap"))
+	rr:add_child(self._atk_cap_l)
 	rr:add_child(spacer())
 	self._ratio_pct = T.label("35%", 13, 800, T.AMBER)
 	rr:add_child(self._ratio_pct)
@@ -179,7 +182,7 @@ function CommandBar._build_sections(self)
 	line:add_child(self._slider)
 	-- (the phone strip's readout: "Sends" over the troops an order sends now. The share itself is
 	-- the stop lit on the bar; until the bar had stops this line read "35%".)
-	self._ratio_inline = T.label("Sends", 12, 600, T.TEXT_3)
+	self._ratio_inline = T.label(I18n.t("bar_sends_lbl"), 12, 600, T.TEXT_3)
 	self._ratio_inline.size_flags_vertical = W.SHRINK_CENTER
 	self._ratio_inline:set_min_size(Vector2.new(40, 0))
 	self._ratio_inline.horizontal_alignment = W.ALIGN_RIGHT
@@ -296,7 +299,7 @@ function CommandBar._build_sections(self)
 	self.tray = GlassPanel.new(10.0, 8.0, T.R_LG, true, 18)
 	self.tray:set_visible(false)
 	self:add_child(self.tray)
-	local tb = W.Button.new("BUILD", "GlassButton")
+	local tb = W.Button.new(I18n.t("bar_build"), "GlassButton")
 	tb.toggle_mode = true
 	tb:set_icon("city")
 	tb:add_theme_constant_override("icon_max_width", 18)
@@ -319,7 +322,8 @@ function CommandBar._build_sections(self)
 	self._place_text = T.label("", 13, 600)
 	self._place_text.size_flags_vertical = W.SHRINK_CENTER
 	pc:add_child(self._place_text)
-	local cancel = T.button("Cancel", "GlassButton", "close", 44.0)
+	local cancel = T.button(I18n.t("bar_cancel"), "GlassButton", "close", 44.0)
+	self._place_cancel = cancel
 	cancel:set_font_size(13)
 	cancel:add_theme_constant_override("icon_max_width", 12)
 	cancel.pressed:Connect(function()
@@ -518,12 +522,12 @@ function CommandBar.set_placing(self, kind: string)
 	end
 	local show = kind ~= "" and ctx.touch
 	if show then
-		local t = R.SHORT[kind] or kind
+		local t = ctx.rules:short_of(kind)
 		local txt = if R.is_nuke(kind)
-			then "Tap a target, then ✓ to launch"
-			else string.format("Tap your land, then ✓ to build the %s", t)
+			then I18n.t("bar_place_target")
+			else I18n.t("bar_place_spot", t)
 		if kind == "warship" then
-			txt = "Tap water near your port, then ✓"
+			txt = I18n.t("bar_place_water")
 		end
 		self._place_text:set_text(txt)
 	end
@@ -792,7 +796,7 @@ function CommandBar.refresh(self, animate: boolean?)
 	T.set_font_color(self._m_growth, if self._rate_up then T.GREEN else T.ORANGE)
 	local at_war = self:_committed_troops()
 	self._committed:set_modulate_a(if at_war > 0 then 1.0 else 0.0)
-	self._committed:set_text(if at_war > 0 then string.format("%s at war", T.fmt_troops(at_war)) else "")
+	self._committed:set_text(if at_war > 0 then I18n.t("bar_at_war_fmt", T.fmt_troops(at_war)) else "")
 	self:_refresh_ratio()
 	self:refresh_buttons()
 end
@@ -828,19 +832,19 @@ function CommandBar.stats_spec(self): { [string]: any }
 		return {}
 	end
 	local rows: { any } = {
-		{ "Troops", string.format("%s / %s", T.fmt_troops(o.troops), T.fmt_troops(o.max_troops)) },
-		{ "Growth", self._growth.text, if self._rate_up then T.GREEN else T.ORANGE },
+		{ I18n.t("ui_troops"), string.format("%s / %s", T.fmt_troops(o.troops), T.fmt_troops(o.max_troops)) },
+		{ I18n.t("bar_growth"), self._growth.text, if self._rate_up then T.GREEN else T.ORANGE },
 	}
 	local at_war = self:_committed_troops()
 	if at_war > 0 then
-		table.insert(rows, { "At war", T.fmt_troops(at_war), T.ORANGE })
+		table.insert(rows, { I18n.t("bar_at_war"), T.fmt_troops(at_war), T.ORANGE })
 	end
-	table.insert(rows, { "Gold", T.fmt_num(o.gold), T.GOLD })
-	table.insert(rows, { "Income", T.fmt_rate(o.income), if o.income > 0 then T.GREEN else T.TEXT_3 })
-	table.insert(rows, { "Land", T.fmt_pct(s:land_share(o.id)) })
+	table.insert(rows, { I18n.t("ui_gold"), T.fmt_num(o.gold), T.GOLD })
+	table.insert(rows, { I18n.t("bar_income"), T.fmt_rate(o.income), if o.income > 0 then T.GREEN else T.TEXT_3 })
+	table.insert(rows, { I18n.t("ui_land"), T.fmt_pct(s:land_share(o.id)) })
 	local pct = ctx.ratio * 100
 	table.insert(rows, {
-		"Each order sends",
+		I18n.t("bar_order_sends"),
 		string.format(
 			"%d%% · %s",
 			if pct >= 0 then math.floor(pct + 0.5) else 0,
@@ -849,10 +853,10 @@ function CommandBar.stats_spec(self): { [string]: any }
 		T.AMBER,
 	})
 	return {
-		title = o.name,
+		title = I18n.owner_name(o.name),
 		swatch = o.color,
 		rows = rows,
-		footer = "Cities raise your troop cap. More land, more gold.",
+		footer = I18n.t("bar_footer"),
 	}
 end
 
@@ -923,8 +927,28 @@ function CommandBar.button(self, kind: string)
 end
 
 function CommandBar.refresh_locale(self)
+	if self._troops_cap_l ~= nil then
+		self._troops_cap_l:set_text(I18n.t("bar_troops_cap"))
+	end
+	if self._gold_cap_l ~= nil then
+		self._gold_cap_l:set_text(I18n.t("bar_gold_cap"))
+	end
+	if self._atk_cap_l ~= nil then
+		self._atk_cap_l:set_text(I18n.t("bar_attack_cap"))
+	end
+	if self._ratio_inline ~= nil then
+		self._ratio_inline:set_text(I18n.t("bar_sends_lbl"))
+	end
+	if self._place_cancel ~= nil then
+		self._place_cancel:set_text(I18n.t("bar_cancel"))
+	end
 	if self._tray_caption ~= nil then
 		self._tray_caption:set_text(I18n.t("bar_build"))
+	elseif self._tray_btn ~= nil and not self.ctx.compact then
+		self._tray_btn:set_text(I18n.t("bar_build"))
+	end
+	if self._shop ~= nil and type(self._shop.refresh_locale) == "function" then
+		self._shop:refresh_locale()
 	end
 	self:_refresh_ratio()
 	self:refresh(false)

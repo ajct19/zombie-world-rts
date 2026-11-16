@@ -2064,20 +2064,131 @@ function Diag.start(Main: any)
 					rig:focus_tile(tile, rig:clamp_scale(lo + (hi - lo) * z), 0.05)
 				end
 				return "focused " .. tostring(oid) .. " tile=" .. tostring(tile)
+			elseif sub == "atk75" then
+				local ui = Main.ui
+				if st == nil or ui == nil or ui.ctx == nil then
+					return "no ui"
+				end
+				local me = st.local_owner or 0
+				local o = if me ~= 0 then st.owners[me] else nil
+				if o == nil or not o.alive then
+					return "not alive"
+				end
+				ui.ctx:set_ratio(0.75)
+				local pre = o.troops or 0
+				local Wgrid, Hgrid = st.map.W, st.map.H
+				local owner_buf = st.owner
+				local pick_t = -1
+				local sx = (o.spawn_tile or 0) % Wgrid
+				local sy = (o.spawn_tile or 0) // Wgrid
+				for rad = 1, 200 do
+					for dy = -rad, rad do
+						local y = sy + dy
+						if y < 0 or y >= Hgrid then
+							continue
+						end
+						for dx = -rad, rad do
+							if math.abs(dx) ~= rad and math.abs(dy) ~= rad then
+								continue
+							end
+							local x = sx + dx
+							if x < 0 or x >= Wgrid then
+								continue
+							end
+							local t = y * Wgrid + x
+							if buffer.readi32(owner_buf, t * 4) ~= me and st.map:is_contestable(t) then
+								local act_t = ui.ctx.rules:primary(t)
+								if act_t.ok and (act_t.type == "expand" or act_t.type == "attack") then
+									pick_t = t
+									break
+								end
+							end
+						end
+						if pick_t >= 0 then
+							break
+						end
+					end
+					if pick_t >= 0 then
+						break
+					end
+				end
+				if pick_t < 0 then
+					return "no border tile"
+				end
+				local act = ui.ctx.rules:primary(pick_t)
+				local intent = ui.ctx.rules:primary_intent(pick_t, act)
+				ui.ctx:send(intent)
+				return HttpService:JSONEncode({
+					tile = pick_t,
+					target = act.target,
+					kind = tostring(act.type),
+					pre_troops = pre,
+					act_troops = act.troops,
+					ratio = ui.ctx.ratio,
+					floor_share = ui.ctx:floor_share(),
+					troop_floor = ui.ctx.troop_floor,
+					confirm = ui.ctx.rules:confirm_text(act),
+				})
+			elseif sub == "coach_tip" then
+				local ui = Main.ui
+				if ui == nil then
+					return "no ui"
+				end
+				if ui.coach ~= nil then
+					ui.coach:reset()
+					ui.coach:clear()
+					ui.coach:offer("city", function()
+						local cb = ui.bar and ui.bar:button("city")
+						if cb ~= nil and cb.get_global_rect ~= nil then
+							local UIC = require(script.Parent.Parent.UI.UICtx) :: any
+							return UIC.rect_center(cb:get_global_rect())
+						end
+						return Vector2.new(-1, -1)
+					end)
+				end
+				local b = ui.bar and ui.bar:button("defense")
+				local spec = if b ~= nil then b:hint_spec() else nil
+				if b ~= nil and ui.tooltip ~= nil and spec ~= nil then
+					ui.tooltip:show_anchor(spec, b)
+				end
+				return HttpService:JSONEncode({
+					coach_cur = if ui.coach ~= nil then ui.coach.current else "",
+					coach_cap = if ui.coach ~= nil and ui.coach._cap ~= nil then ui.coach._cap.text else "",
+					coach_text = if ui.coach ~= nil and ui.coach._text ~= nil then ui.coach._text.text else "",
+					tip_title = if spec ~= nil then tostring(spec.title) else "",
+					tip_body = if spec ~= nil then tostring(spec.body) else "",
+					tip_hint = if spec ~= nil then tostring(spec.hint) else "",
+				})
 			else
 				local best_zid = 0
 				local best_ztiles = -1
+				local hive_count = 0
+				local hive_troops_max = 0
+				local hive1_dist = -1
+				local me = if st ~= nil then st.local_owner else 0
+				local my_spawn = if st ~= nil and me ~= 0 and st.owners[me] ~= nil then (st.owners[me].spawn_tile or -1) else -1
 				if st ~= nil then
 					for id, o in st.owners do
-						if o.alive and o.tiles > best_ztiles and st:is_infected(id) then
-							best_zid = id
-							best_ztiles = o.tiles
+						if o.alive and st:is_infected(id) then
+							hive_count += 1
+							hive_troops_max = math.max(hive_troops_max, o.troops or 0)
+							if my_spawn >= 0 and (o.spawn_tile or -1) >= 0 then
+								local Wg = st.map.W
+								local d = math.abs((o.spawn_tile % Wg) - (my_spawn % Wg))
+									+ math.abs((o.spawn_tile // Wg) - (my_spawn // Wg))
+								if hive1_dist < 0 or d < hive1_dist then
+									hive1_dist = d
+								end
+							end
+							if o.tiles > best_ztiles then
+								best_zid = id
+								best_ztiles = o.tiles
+							end
 						end
 					end
 				end
 				local surf = Main.world and Main.world.surface
 				local ui = Main.ui
-				local me = if st ~= nil then st.local_owner else 0
 				return HttpService:JSONEncode({
 					mode = session.mode,
 					building = session:is_building(),
@@ -2094,10 +2205,21 @@ function Diag.start(Main: any)
 					inf_tiles = (st ~= nil and st:infected_tiles()) or 0,
 					zid = best_zid,
 					zid_tiles = best_ztiles,
+					hive_count = hive_count,
+					hive_troops_max = hive_troops_max,
+					hive_name = if best_zid > 0 and st ~= nil then I18n.owner_name(st:owner_name(best_zid)) else "",
+					hive1_dist = hive1_dist,
 					zid_skin = (best_zid > 0 and surf ~= nil and surf._skins ~= nil and surf._skins[best_zid] ~= nil and surf._skins[best_zid].zombie == true)
 						or false,
 					me_skin = (me > 0 and surf ~= nil and surf._skins ~= nil and surf._skins[me] ~= nil and surf._skins[me].zombie == true)
 						or false,
+					troop_floor = if ui ~= nil and ui.ctx ~= nil then ui.ctx.troop_floor else nil,
+					floor_share = if ui ~= nil and ui.ctx ~= nil then ui.ctx:floor_share() else 1.0,
+					bar_troops_cap = (ui ~= nil and ui.bar ~= nil and ui.bar._troops_cap_l ~= nil and ui.bar._troops_cap_l.text) or "",
+					bar_attack_cap = (ui ~= nil and ui.bar ~= nil and ui.bar._atk_cap_l ~= nil and ui.bar._atk_cap_l.text) or "",
+					top_ctrl = (ui ~= nil and ui.top ~= nil and ui.top._ctrl_cap ~= nil and ui.top._ctrl_cap.text) or "",
+					lb_title = (ui ~= nil and ui.board ~= nil and ui.board._title_l ~= nil and ui.board._title_l.text) or "",
+					tutorial_active = (ui ~= nil and ui.tutorial ~= nil and ui.tutorial.active == true) or false,
 					alert_vis = (ui ~= nil and ui.alert ~= nil and ui.alert.visible) or false,
 					alert_title = (ui ~= nil and ui.alert ~= nil and ui.alert._title ~= nil and ui.alert._title.text)
 						or "",

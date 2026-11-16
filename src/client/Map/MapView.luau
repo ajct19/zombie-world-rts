@@ -276,7 +276,7 @@ function MapView.new(): MapView
 	end)
 	self._render_name = "RofrontMapView"
 	local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
-	RunService:BindToRenderStep(self._render_name, MapView.RENDER_PRIORITY, function(dt: number)
+	FrameClock.bind(self._render_name, MapView.RENDER_PRIORITY, function(dt: number)
 		guard("update", self.update, self, FrameClock.dt(dt))
 	end)
 	-- the map: terrain composited off the boot path (the default map until a state names another)
@@ -971,7 +971,8 @@ end
 
 function MapView.destroy(self: any)
 	self:unbind()
-	RunService:UnbindFromRenderStep(self._render_name)
+	local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
+	FrameClock.unbind(self._render_name)
 	for _, name in self._layer_order do
 		call(self.layers[name], "destroy")
 	end

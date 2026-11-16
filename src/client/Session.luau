@@ -370,10 +370,9 @@ end
 
 --- Roblox: drive the session from the render loop (priority First, so views read a fresh render_tick).
 function Session.bind(self: any)
-	local RunService = game:GetService("RunService")
 	-- (the frame's dt: a Studio film steps it, Map/FrameClock)
 	local FrameClock = require((script :: any).Parent:WaitForChild("Map"):WaitForChild("FrameClock")) :: any
-	RunService:BindToRenderStep("AirfrontSession", Enum.RenderPriority.First.Value, function(dt: number)
+	FrameClock.bind("AirfrontSession", Enum.RenderPriority.First.Value, function(dt: number)
 		local t0 = os.clock()
 		self:process(FrameClock.dt(dt))
 		self.perf.process_s += os.clock() - t0

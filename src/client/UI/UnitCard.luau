@@ -10,6 +10,7 @@ local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
 local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
+local I18n = UICtx.data("I18n")
 
 local UIRules = nil
 local function Rules()
@@ -21,6 +22,7 @@ end
 
 local UnitCard = W.class(W.Control)
 
+local STATE_KEYS = { [0] = "uc_patrol", "uc_return", "uc_repair" }
 UnitCard.STATE_TEXT = { [0] = "Patrolling", "Returning to port for repairs", "Repairing" }
 UnitCard.DEST_SECONDS = 2.5
 
@@ -62,7 +64,7 @@ function UnitCard.new(c: any)
 	self._icon = UITheme.icon_rect("warship", 16.0, UITheme.CYAN)
 	self._icon.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(self._icon)
-	self._title = UITheme.label("Warship", 14, 700)
+	self._title = UITheme.label(I18n.t("uc_title"), 14, 700)
 	self._title.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(self._title)
 	self._sw = UITheme.swatch(UITheme.TEXT, 9.0, 2)
@@ -115,7 +117,7 @@ function UnitCard.new(c: any)
 	v:add_child(self._next_l)
 	self._state_l = UITheme.label("", 12, 600, UITheme.TEXT_2)
 	v:add_child(self._state_l)
-	self._hint = UITheme.label("Tap the sea to move it", 12, 600, UITheme.CYAN)
+	self._hint = UITheme.label(I18n.t("uc_tap_move"), 12, 600, UITheme.CYAN)
 	v:add_child(self._hint)
 	panel:set_min_size(Vector2.new(240, 0))
 	panel:set_visible(false)
@@ -167,7 +169,7 @@ function UnitCard.refresh(self)
 	local R = UICtx.core("Rules")
 	local o = s:get_owner(u.owner)
 	UITheme.set_swatch_color(self._sw, if o ~= nil then o.color else UITheme.TEXT)
-	self._owner_l:set_text(if self.own then "Yours" else s:owner_name(u.owner))
+	self._owner_l:set_text(if self.own then I18n.t("uc_yours") else ctx:owner_name(u.owner))
 	self._sw:set_visible(not self.own)
 	local max_hp = UnitCard.field(u, "max_hp", R.WARSHIP_HP)
 	if max_hp <= 0.0 then
@@ -184,27 +186,24 @@ function UnitCard.refresh(self)
 	end
 	local max_vet = tonumber(Rules().rules_const("WARSHIP_MAX_VET", 3)) or 3
 	local prog = UnitCard.field(u, "vet_progress", -1.0)
-	self._vet_l:set_text(string.format("Veterancy %d of %d", vet, max_vet))
+	self._vet_l:set_text(I18n.t("uc_vet_fmt", vet, max_vet))
 	-- sinking a warship ranks up at once; or 10 transports / 25 trade ships.
 	self._next_l:set_visible(vet < max_vet)
 	if prog >= 0.0 then
-		self._next_l:set_text(string.format("%d%% to the next rank", math.floor(prog * 100.0 + 0.5)))
+		self._next_l:set_text(I18n.t("uc_pct_next", math.floor(prog * 100.0 + 0.5)))
 	else
 		self._next_l:set_text(
-			string.format(
-				"Next: sink a warship or %d boats",
-				tonumber(Rules().rules_const("WARSHIP_VET_TRANSPORTS", 10)) or 10
-			)
+			I18n.t("uc_vet_next", tonumber(Rules().rules_const("WARSHIP_VET_TRANSPORTS", 10)) or 10)
 		)
 	end
 	local stt = math.floor(UnitCard.field(u, "state", 0.0))
-	self._state_l:set_text(UnitCard.STATE_TEXT[math.clamp(stt, 0, 2)])
+	self._state_l:set_text(I18n.t(STATE_KEYS[math.clamp(stt, 0, 2)] or "uc_patrol"))
 	UITheme.set_font_color(
 		self._state_l,
 		if stt == 1 then UITheme.ORANGE elseif stt == 2 then UITheme.GREEN else UITheme.TEXT_2
 	)
 	self._hint:set_visible(self.own)
-	self._hint:set_text(if ctx.touch then "Tap the sea to move it" else "Click the sea to move it")
+	self._hint:set_text(I18n.t(if ctx.touch then "uc_tap_move" else "uc_click_move"))
 	self._panel:set_accent(if self.own then UITheme.CYAN else UITheme.ORANGE)
 end
 
@@ -298,6 +297,15 @@ function UnitCard._process(self, delta: number)
 	self._accum += delta
 	if self._accum >= 0.25 then
 		self._accum = 0.0
+		self:refresh()
+	end
+end
+
+function UnitCard.refresh_locale(self)
+	if self._title ~= nil then
+		self._title:set_text(I18n.t("uc_title"))
+	end
+	if self.is_open then
 		self:refresh()
 	end
 end

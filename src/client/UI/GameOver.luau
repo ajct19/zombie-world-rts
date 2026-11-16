@@ -555,6 +555,7 @@ function GameOver.open(self, kind: string, winner: number, killer: number, stats
 	local sess = ctx.session
 	self:set_award(if sess ~= nil then sess.last_award else nil)
 	self._again:set_visible(solo)
+	self._again:set_text(UICtx.t("over_play_again"))
 	self._spec:set_visible(kind == "eliminated" and running)
 	self._spec:set_text(UICtx.t("over_keep_watching"))
 	self._home:set_text(UICtx.t("over_return_title"))
@@ -657,6 +658,7 @@ function GameOver._show_takeover(self)
 		return
 	end
 	local name = tostring(info.name)
+	local disp = UICtx.data("I18n").owner_name(name)
 	local fl = flag_named(name)
 	self._take_flag:set_visible(fl ~= nil)
 	self._take_sw:set_visible(fl == nil)
@@ -668,16 +670,12 @@ function GameOver._show_takeover(self)
 	elseif info.color ~= nil then
 		UITheme.set_swatch_color(self._take_sw, info.color)
 	end
-	self._take_title:set_text("TAKE OVER " .. string.upper(name))
+	self._take_title:set_text(UICtx.t("over_take_title_fmt", string.upper(disp)))
 	self._take_btn:set_disabled(info.busy == true)
 	local saved = info.saved > 0
-	self._take_kicker:set_text(if saved then "YOUR TAKEOVER IS SAVED" else "DON'T GIVE UP")
-	self._take_sub:set_text(
-		if saved
-			then "Use it now: " .. name .. "'s land, army and gold become yours."
-			else name .. "'s land, army, gold and buildings become yours. Keep playing from where they stand."
-	)
-	self._take_btn:set_text(if info.busy then "…" elseif saved then "USE IT NOW" else "TAKE OVER")
+	self._take_kicker:set_text(UICtx.t(if saved then "over_take_kicker_saved" else "over_take_kicker"))
+	self._take_sub:set_text(UICtx.t(if saved then "over_take_sub_saved" else "over_take_sub", disp))
+	self._take_btn:set_text(if info.busy then "…" elseif saved then UICtx.t("over_take_btn_use") else UICtx.t("over_take_btn"))
 	self._take_price.Text = tostring(info.price)
 	self._take_tag.Visible = not saved and not info.busy
 	self:_refresh_take_chips()
@@ -698,7 +696,7 @@ function GameOver._refresh_take_chips(self)
 	self._chip.land:set_text(land)
 	self._chip.troops:set_text(troops)
 	self._chip.gold:set_text(gold)
-	self._take_line:set_text(string.format("%s LAND  ·  %s TROOPS  ·  %s GOLD", land, troops, gold))
+	self._take_line:set_text(UICtx.t("over_take_line_fmt", land, troops, gold))
 end
 
 --- The card's sizes (desktop / phones), the title fitted to the card, the price tag in px.
@@ -763,7 +761,7 @@ end
 
 function GameOver.set_building(self, on: boolean)
 	self._again:set_disabled(on)
-	self._again:set_text(if on then "DEPLOYING…" else "PLAY AGAIN")
+	self._again:set_text(UICtx.t(if on then "over_deploying" else "over_play_again"))
 end
 
 --- Fills the winner / leader pill for owner `id` (hidden when there is none, and on VICTORY).
@@ -783,8 +781,9 @@ function GameOver._set_pill(self, id: number)
 		return
 	end
 	local share = if self._pill_domination then self:_win_share(id) else s:land_share(id)
-	local prefix = if self._pill_live then "Current leader  ·  " else ""
-	local text = string.format("%s%s  ·  %s", prefix, wo.name, UITheme.fmt_pct(share))
+	local prefix = if self._pill_live then UICtx.t("over_leader_prefix") else ""
+	local wdisp = UICtx.data("I18n").owner_name(wo.name)
+	local text = string.format("%s%s  ·  %s", prefix, wdisp, UITheme.fmt_pct(share))
 	if id ~= self._pill_id then
 		UITheme.set_swatch_color(self._winner_sw, wo.color)
 	end
@@ -846,7 +845,7 @@ function GameOver._copy(self, kind: string, winner: number, killer: number, reas
 	local s = ctx.state
 	local I18n = UICtx.data("I18n")
 	local R = UICtx.core("Rules")
-	local wname = if s ~= nil and winner ~= 0 then s:owner_name(winner) else "Nobody"
+	local wname = if s ~= nil and winner ~= 0 then ctx:owner_name(winner) else I18n.t("over_nobody")
 	local wshare = if s ~= nil and winner ~= 0 then UITheme.fmt_pct(s:land_share(winner)) else "0%"
 	-- Domination is decided on the land outside fallout (Sim._check_victory): the copy uses the same
 	-- metric, so it always agrees with the 80% goal (review R2-4).
@@ -854,12 +853,12 @@ function GameOver._copy(self, kind: string, winner: number, killer: number, reas
 	self._dominated = dominated
 	local wdom = if s ~= nil and winner ~= 0 then self:_win_phrase(winner, "") else "0%"
 	local lead = self:_leader_id()
-	local lname = if s ~= nil and lead ~= 0 then s:owner_name(lead) else "Nobody"
+	local lname = if s ~= nil and lead ~= 0 then ctx:owner_name(lead) else I18n.t("over_nobody")
 	local lshare = if s ~= nil and lead ~= 0 then UITheme.fmt_pct(s:land_share(lead)) else "0%"
 	local gold_top = Color3.new(1.0, 0.97, 0.86)
 	local red_top = Color3.new(1.0, 0.85, 0.85)
 	local cyan_top = Color3.new(0.92, 0.97, 1.0)
-	local c = { kicker = "MATCH COMPLETE", title = "GAME OVER", sub = "", top = cyan_top, bottom = UITheme.CYAN }
+	local c = { kicker = I18n.t("over_kicker_done"), title = I18n.t("over_title_over"), sub = "", top = cyan_top, bottom = UITheme.CYAN }
 	local wt = if s ~= nil then tonumber(s.winner_team) or 0 else 0
 	if s ~= nil and s.game_mode == "zombie" and kind ~= "eliminated" then
 		local me = ctx:me()
@@ -904,78 +903,78 @@ function GameOver._copy(self, kind: string, winner: number, killer: number, reas
 		local tname = ctx:team_label(wt)
 		local the = if string.sub(tname, 1, 5) == "Team " then tname else "The " .. tname
 		if reason == Defs.OVER_TIME then
-			c.kicker = "TIME LIMIT REACHED"
+			c.kicker = I18n.t("over_kicker_time")
 		end
 		if kind == "victory" then
-			c.title = "VICTORY"
+			c.title = I18n.t("over_title_victory")
 			c.top = gold_top
 			c.bottom = UITheme.GOLD
 			c.sub = if reason == Defs.OVER_TIME
-				then string.format("Time! Your team holds the most land with %s.", tshare)
-				else string.format("Your team won with %s of the land.", tshare)
+				then I18n.t("over_sub_time_other", tname, tshare)
+				else I18n.t("over_sub_other_won", tname, tshare)
 		else
-			c.title = if kind == "defeat" then "DEFEAT" else "MATCH OVER"
+			c.title = I18n.t(if kind == "defeat" then "over_title_defeat" else "over_title_match_over")
 			c.top = if kind == "defeat" then red_top else cyan_top
 			c.bottom = if kind == "defeat" then UITheme.RED else UITheme.CYAN
 			c.sub = if reason == Defs.OVER_TIME
-				then string.format("Time! %s holds the most land with %s.", the, tshare)
-				else string.format("%s won with %s of the land.", the, tshare)
+				then I18n.t("over_sub_time_other", tname, tshare)
+				else I18n.t("over_sub_other_won", tname, tshare)
 		end
 		return c
 	end
 	if kind == "eliminated" then
-		c.kicker = "YOUR NATION HAS FALLEN"
-		c.title = "ELIMINATED"
+		c.kicker = I18n.t("over_kicker_fallen")
+		c.title = I18n.t("over_title_elim")
 		c.top = red_top
 		c.bottom = UITheme.RED
 		c.sub = if s ~= nil and killer ~= 0
-			then string.format("Conquered by %s at %s.", s:owner_name(killer), UITheme.fmt_time(secs))
-			else string.format("Your last territory fell at %s.", UITheme.fmt_time(secs))
+			then I18n.t("over_sub_conquered_by", ctx:owner_name(killer), UITheme.fmt_time(secs))
+			else I18n.t("over_sub_last_fell", UITheme.fmt_time(secs))
 	elseif kind == "victory" then
-		c.title = "VICTORY"
+		c.title = I18n.t("over_title_victory")
 		c.top = gold_top
 		c.bottom = UITheme.GOLD
 		if reason == Defs.OVER_TIME then
-			c.kicker = "TIME LIMIT REACHED"
-			c.sub = string.format("Time! You hold the most land with %s.", wshare)
+			c.kicker = I18n.t("over_kicker_time")
+			c.sub = I18n.t("over_sub_time_you", wshare)
 		else
-			c.sub = string.format(
-				"You conquered the world with %s.",
-				if s ~= nil and winner ~= 0 then self:_win_phrase(winner, " of all land") else wshare
+			c.sub = I18n.t(
+				"over_sub_you_conquered",
+				if s ~= nil and winner ~= 0 then self:_win_phrase(winner, "") else wshare
 			)
 		end
 	elseif kind == "defeat" then
 		c.top = red_top
 		c.bottom = UITheme.RED
 		if reason == Defs.OVER_TIME then
-			c.kicker = "TIME LIMIT REACHED"
-			c.title = "TIME'S UP"
-			c.sub = string.format("Time! %s holds the most land with %s.", wname, wshare)
+			c.kicker = I18n.t("over_kicker_time")
+			c.title = I18n.t("over_title_times_up")
+			c.sub = I18n.t("over_sub_time_other", wname, wshare)
 		elseif dominated then
-			c.title = "DEFEAT"
-			c.sub = string.format("%s conquered the world (%s).", wname, wdom)
+			c.title = I18n.t("over_title_defeat")
+			c.sub = I18n.t("over_sub_other_conquered", wname, wdom)
 		else
-			c.title = "DEFEAT"
-			c.sub = string.format("%s won the war with %s of the land.", wname, wshare)
+			c.title = I18n.t("over_title_defeat")
+			c.sub = I18n.t("over_sub_other_won", wname, wshare)
 		end
 	else
 		if reason == Defs.OVER_TIME then
-			c.kicker = "TIME LIMIT REACHED"
-			c.title = "TIME'S UP"
-			c.sub = string.format("Time! %s holds the most land with %s.", wname, wshare)
+			c.kicker = I18n.t("over_kicker_time")
+			c.title = I18n.t("over_title_times_up")
+			c.sub = I18n.t("over_sub_time_other", wname, wshare)
 		elseif reason == Defs.OVER_DOMINATION then
 			c.sub = if dominated
-				then string.format("%s conquered the world (%s).", wname, wdom)
-				else string.format("%s won the war with %s of the land.", wname, wshare)
+				then I18n.t("over_sub_other_conquered", wname, wdom)
+				else I18n.t("over_sub_other_won", wname, wshare)
 		elseif reason == Defs.OVER_DEFEATED then
-			c.title = "MATCH OVER"
-			c.sub = string.format("Every commander has fallen. %s leads with %s.", lname, lshare)
+			c.title = I18n.t("over_title_match_over")
+			c.sub = I18n.t("over_sub_all_fell", lname, lshare)
 		elseif reason == Defs.OVER_ABANDONED then
-			c.title = "MATCH OVER"
-			c.sub = string.format("Every commander left the match. %s leads with %s.", lname, lshare)
+			c.title = I18n.t("over_title_match_over")
+			c.sub = I18n.t("over_sub_all_left", lname, lshare)
 		else
-			c.title = "MATCH OVER"
-			c.sub = string.format("%s leads with %s.", lname, lshare)
+			c.title = I18n.t("over_title_match_over")
+			c.sub = I18n.t("over_sub_leads", lname, lshare)
 		end
 	end
 	return c

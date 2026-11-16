@@ -11,15 +11,11 @@ local UICtx = require("./UICtx")
 
 local Coach = W.class(W.Control)
 local Tut = UICtx.data("Tutorial")
-local FLOOR_TIP = string.format(
-	"Keep %d%% of your army at home, or neighbours walk right in. In your first %d matches, attacks hold that much back.",
-	math.floor(Tut.ROOKIE_FLOOR * 100 + 0.5),
-	Tut.ROOKIE_MATCHES
-)
+local I18n = UICtx.data("I18n")
 
 --- `again`: shown each time it is offered, not once per player (UIAdvisor paces it).
 Coach.TIPS = {
-	floor = { icon = "troops", again = true, desktop = FLOOR_TIP, touch = FLOOR_TIP },
+	floor = { icon = "troops", again = true },
 	expand = {
 		icon = "attack",
 		desktop = "Click neutral land next to you to expand. Space does the same under the cursor.",
@@ -132,13 +128,13 @@ function Coach.new(c: any)
 	local v = UITheme.vbox(6)
 	v.size_flags_horizontal = W.EXPAND_FILL
 	self._v = v
-	self._cap = UITheme.caption("Tip", 10, UITheme.AMBER)
+	self._cap = UITheme.caption(I18n.t("coach_cap"), 10, UITheme.AMBER)
 	v:add_child(self._cap)
 	self._text = UITheme.label("", 13, 500, UITheme.TEXT)
 	self._text:set_autowrap(true)
 	self._text:set_min_size(Vector2.new(230, 0))
 	v:add_child(self._text)
-	self._ok = UITheme.button("Got it", "GhostButton", "", 30.0)
+	self._ok = UITheme.button(I18n.t("coach_ok"), "GhostButton", "", 30.0)
 	self._ok:set_font_size(12)
 	self._ok.size_flags_horizontal = W.SHRINK_END
 	self._ok.pressed:Connect(function()
@@ -251,6 +247,32 @@ function Coach.clear(self)
 	self:_draw_arrow()
 end
 
+function Coach._tip_text(self, id: string, arg: any): string
+	if id == "floor" then
+		return I18n.t("coach_floor_fmt", math.floor(Tut.ROOKIE_FLOOR * 100 + 0.5), Tut.ROOKIE_MATCHES)
+	end
+	local suffix = if self.ctx.touch then "_t" else "_d"
+	local txt = I18n.t("coach_" .. id .. suffix)
+	if string.find(txt, "%s", 1, true) then
+		txt = string.format(txt, I18n.owner_name(arg))
+	end
+	return txt
+end
+
+function Coach.refresh_locale(self)
+	if self._cap ~= nil then
+		self._cap:set_text(I18n.t("coach_cap"))
+	end
+	if self._ok ~= nil then
+		self._ok:set_text(I18n.t("coach_ok"))
+	end
+	if self.current ~= "" and self._text ~= nil then
+		self._text:set_text(self:_tip_text(self.current, self._cur_arg))
+		self._card:reset_size()
+		self:_place()
+	end
+end
+
 function Coach._next(self)
 	if #self._queue == 0 or self.current ~= "" then
 		return
@@ -265,11 +287,8 @@ function Coach._next(self)
 	end
 	self.current = id
 	self._target = q.target
-	local txt = if ctx.touch then tip.touch else tip.desktop
-	if string.find(txt, "%s", 1, true) then
-		txt = string.format(txt, q.arg)
-	end
-	self._text:set_text(txt)
+	self._cur_arg = q.arg
+	self._text:set_text(self:_tip_text(id, q.arg))
 	self._icon:set_icon(tip.icon)
 	if not tip.again then
 		self:_mark_seen(id)

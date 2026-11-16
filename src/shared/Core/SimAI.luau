@@ -607,18 +607,24 @@ function SimAI:_think_zombie(sim, id: number)
 	if sim.o_alive[id] == 0 or sim.o_tiles[id] <= 0 then
 		return
 	end
+	local cap = math.max(sim.o_cap[id], 1000.0)
+	local reserve = cap * 0.18
 	local troops = sim.o_troops[id]
-	if troops < 180.0 then
+	if troops < reserve + 400.0 then
 		return
 	end
-	sim:scan_border(id, 48)
-	if sim.sc_neutral_tile >= 0 then
-		sim:intent_attack(id, sim.sc_neutral_tile, 0.35)
+	sim:scan_border(id, math.ceil(600 * sim.R.LEGACY_LIN))
+	if sim.sc_neutral_tile >= 0 and sim:attack_between(id, 0) == nil then
+		local send_n = math.max(0.0, sim.o_troops[id] - reserve) * 0.45
+		if send_n >= 300.0 then
+			sim:intent_attack_troops(id, sim.sc_neutral_tile, send_n)
+		end
 	end
 	local candidates = {}
 	local sc_count = sim.sc_count
 	local o_troops = sim.o_troops
 	local o_kind = sim.o_kind
+	local cur_troops = sim.o_troops[id]
 	for _, p in sim.sc_list do
 		if sim:is_infected(p) or sim:allied(id, p) or sim:shielded(p) or sim.o_alive[p] == 0 then
 			continue
@@ -627,7 +633,11 @@ function SimAI:_think_zombie(sim, id: number)
 		if contact <= 0 then
 			continue
 		end
-		local score = contact * (troops / math.max(o_troops[p], 1200.0))
+		local ex = sim:attack_between(id, p)
+		if ex ~= nil and ex.troops >= math.min(cur_troops * 0.12, cap * 0.12) then
+			continue
+		end
+		local score = contact * (cur_troops / math.max(o_troops[p], 1200.0))
 		if o_kind[p] == KIND_TRIBE then
 			score *= 2.2
 		elseif sim:vaccine_active(p) then
@@ -642,19 +652,32 @@ function SimAI:_think_zombie(sim, id: number)
 		return a.id < b.id
 	end)
 	local cap_targets = math.min(#candidates, 3)
-	local ratio = if cap_targets > 1 then 0.28 else 0.42
-	for i = 1, cap_targets do
-		if sim.o_troops[id] < 150.0 then
-			break
-		end
-		local tg = candidates[i].id
-		local t = sim.sc_tile[tg]
-		if t >= 0 then
-			sim:intent_attack(id, t, ratio)
+	local avail = math.max(0.0, sim.o_troops[id] - reserve)
+	if cap_targets > 0 and avail >= 400.0 then
+		local per_target = avail * (if cap_targets > 1 then 0.28 else 0.45)
+		for i = 1, cap_targets do
+			local remain = sim.o_troops[id] - reserve
+			if remain < 300.0 then
+				break
+			end
+			local tg = candidates[i].id
+			local t = sim.sc_tile[tg]
+			if t >= 0 then
+				sim:intent_attack_troops(id, t, math.min(per_target, remain))
+			end
 		end
 	end
-	if cap_targets == 0 and sim.sc_neutral_tile < 0 and sim.sc_fallout_tile >= 0 and troops > sim.o_cap[id] * 0.55 then
-		sim:intent_attack(id, sim.sc_fallout_tile, 0.25)
+	if
+		cap_targets == 0
+		and sim.sc_neutral_tile < 0
+		and sim.sc_fallout_tile >= 0
+		and sim:attack_between(id, 0) == nil
+		and sim.o_troops[id] > cap * 0.55
+	then
+		local send_f = math.max(0.0, sim.o_troops[id] - reserve) * 0.35
+		if send_f >= 300.0 then
+			sim:intent_attack_troops(id, sim.sc_fallout_tile, send_f)
+		end
 	end
 	if
 		sim.o_coast[id] > 0

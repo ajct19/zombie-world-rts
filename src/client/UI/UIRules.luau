@@ -127,7 +127,12 @@ end
 --- Blurb with its numbers filled in from Rules.
 function UIRules.blurb(kind: string): string
 	local R = Rules()
-	return UIRules.format(UIRules.BLURBS[kind] or "", {
+	local key = "unit_" .. kind .. "_blurb"
+	local tpl = I18n().t(key)
+	if tpl == key then
+		tpl = UIRules.BLURBS[kind] or ""
+	end
+	return UIRules.format(tpl, {
 		city = T().fmt_troops(R.CITY_TROOPS),
 		def_r = tostring(Defs.round(R.defense_range())),
 		def_mag = tostring(Defs.round(R.DEFENSE_POST_MAG)),
@@ -186,7 +191,9 @@ function UIRules.title_of(self: any, kind: string): string
 			return I18n().t("vaccine_title")
 		end
 	end
-	return UIRules.TITLES[kind] or kind
+	local key = "unit_" .. kind .. "_title"
+	local loc = I18n().t(key)
+	return if loc ~= key then loc else (UIRules.TITLES[kind] or kind)
 end
 
 function UIRules.short_of(self: any, kind: string): string
@@ -197,7 +204,9 @@ function UIRules.short_of(self: any, kind: string): string
 			return I18n().t("vaccine_short")
 		end
 	end
-	return UIRules.SHORT[kind] or kind
+	local key = "unit_" .. kind .. "_short"
+	local loc = I18n().t(key)
+	return if loc ~= key then loc else (UIRules.SHORT[kind] or kind)
 end
 
 function UIRules.blurb_of(self: any, kind: string): string
@@ -297,12 +306,12 @@ function UIRules.blast_text(kind: string): string
 	local inner, outer = UIRules.nuke_radii(kind)
 	if kind == "mirv" then
 		-- MIRV_WARHEADS is the cap: the real count follows the target's land (55-tile spacing)
-		return string.format("Up to %d warheads across the target nation", Rules().MIRV_WARHEADS)
+		return I18n().t("blast_mirv", Rules().MIRV_WARHEADS)
 	end
 	if inner > 0.0 then
-		return string.format("%d tiles (%d wiped out)", Defs.round(outer), Defs.round(inner))
+		return I18n().t("blast_tiles_inner", Defs.round(outer), Defs.round(inner))
 	end
-	return string.format("%d tiles", Defs.round(outer))
+	return I18n().t("blast_tiles", Defs.round(outer))
 end
 
 --- The victory metric as result-screen copy (review R2-4): `win` = share of the land outside
@@ -605,47 +614,53 @@ function UIRules.availability(self: any, kind: string): { [string]: any }
 	local out = { ok = false, locked = false, reason = "", cost = c } :: { [string]: any }
 	local s = ctx.state
 	local o = ctx:my()
+	local I = I18n()
 	-- an Arsenal kind the player hasn't unlocked: `arsenal` names the item to offer
 	if self:arsenal_locked(kind) then
 		local it = UIRules.arsenal_item(kind)
-		out.reason = "Unlock " .. it.title .. " in the Arsenal"
+		local tk = "ars_" .. it.key .. "_title"
+		local at = I.t(tk)
+		out.reason = I.t("avail_unlock", if at ~= tk then at else it.title)
 		out.locked = true
 		out.arsenal = it.key
 		return out
 	end
 	if s == nil or o == nil or not ctx:in_match() then
-		out.reason = "Join a match first"
+		out.reason = I.t("avail_join")
 		out.locked = true
 		return out
 	end
 	if not o.spawned then
-		out.reason = "Place your capital first"
+		out.reason = I.t("avail_capital")
 		out.locked = true
 		return out
 	end
 	if not o.alive then
-		out.reason = "You have been eliminated"
+		out.reason = I.t("avail_elim")
 		out.locked = true
 		return out
 	end
 	if s.phase ~= Defs.PHASE_PLAYING then
-		out.reason = "Available once the match begins"
+		out.reason = I.t("avail_match_wait")
 		out.locked = true
 		return out
 	end
 	if UIRules.is_nuke(kind) then
 		-- the structure it leaves from: a silo, or (strikes) an airfield / a railgun
 		local lk = UIRules.launcher(kind)
-		local title = Defs.STRUCT_TITLES[lk]
+		local title = I.struct_title(lk, self:is_zombie_survivor())
 		if self:struct_count(lk) == 0 then
-			out.reason = "Requires " .. (if lk == Defs.S_AIRFIELD then "an " else "a ") .. title
+			out.reason = if lk == Defs.S_SILO
+				then I.t("avail_req_silo")
+				elseif lk == Defs.S_AIRFIELD then I.t("avail_req_airfield")
+				else I.t("avail_req_unit", title)
 			out.locked = true
 			return out
 		end
 		local act, _, soon = self:active_structs(lk)
 		if act == 0 then
-			local what = if lk == Defs.S_SILO then "Silo" else title
-			out.reason = what .. " under construction · ready in " .. T().fmt_time(math.ceil(soon))
+			local what = if lk == Defs.S_SILO then I.t("unit_silo_short") else title
+			out.reason = I.t("avail_under_const", what, T().fmt_time(math.ceil(soon)))
 			out.locked = true
 			return out
 		end
@@ -653,8 +668,8 @@ function UIRules.availability(self: any, kind: string): { [string]: any }
 			local ready, wait = self:ready_launchers(lk)
 			if ready == 0 then
 				out.reason = string.format(
-					"%s · ready in %s",
-					if lk == Defs.S_AIRFIELD then "Airfield rearming" else "Railgun reloading",
+					"%s · %s",
+					I.t(if lk == Defs.S_AIRFIELD then "avail_airfield_loading" else "avail_railgun_loading"),
 					T().fmt_time(math.ceil(wait))
 				)
 				return out
@@ -664,39 +679,39 @@ function UIRules.availability(self: any, kind: string): { [string]: any }
 	if kind == "reinforce" then
 		local wait = ((s.reinforce_ready and s.reinforce_ready[o.id]) or 0) - s.tick
 		if wait > 0 then
-			out.reason = "Ready in " .. T().fmt_time(math.ceil(wait / Defs.TICK_RATE))
+			out.reason = I.t("avail_ready_in", T().fmt_time(math.ceil(wait / Defs.TICK_RATE)))
 			return out
 		end
 		if not self:is_zombie_survivor() and Rules().reinforce_troops(o.troops or 0, o.max_troops or 0) <= 0 then
-			out.reason = "Your army is at its cap"
+			out.reason = I.t("avail_cap_full")
 			return out
 		end
 	end
 	if kind == "port" and not ctx.borders:has_coast() then
-		out.reason = "Requires a coastline"
+		out.reason = I.t("avail_req_coast")
 		out.locked = true
 		return out
 	end
 	if kind == "warship" and self:struct_count(Defs.S_PORT) == 0 then
-		out.reason = "Requires a Port"
+		out.reason = I.t("avail_req_port")
 		out.locked = true
 		return out
 	end
 	if kind == "warship" then
 		local act, _, soon = self:active_structs(Defs.S_PORT)
 		if act == 0 then
-			out.reason = "Port under construction · ready in " .. T().fmt_time(math.ceil(soon))
+			out.reason = I.t("avail_port_building", T().fmt_time(math.ceil(soon)))
 			out.locked = true
 			return out
 		end
 	end
 	if c < 0 then
-		out.reason = "Unavailable"
+		out.reason = I.t("avail_unavailable")
 		out.locked = true
 		return out
 	end
 	if (o.gold or 0) < c then
-		out.reason = "Need " .. T().fmt_num(c - o.gold) .. " more gold"
+		out.reason = I.t("avail_need_gold", T().fmt_num(c - o.gold))
 		return out
 	end
 	out.ok = true
@@ -789,8 +804,8 @@ function UIRules.bulk_ring(self: any, prefix: string, kind: string): { any }?
 		local reason = ""
 		if not ok then
 			reason = if nuke and n > loaded
-				then string.format("Only %d missile%s loaded", loaded, if loaded == 1 then "" else "s")
-				else "Not enough gold"
+				then (if loaded == 1 then I18n().t("bulk_loaded_one") else I18n().t("bulk_loaded_many", loaded))
+				else I18n().t("bulk_gold")
 		end
 		table.insert(ring, {
 			id = string.format("%s:%s:%d", prefix, kind, n),
@@ -831,6 +846,14 @@ UIRules.PLACE_REASONS = {
 	invalid = "Can't build here",
 }
 
+local function place_reason(code: string): string
+	local I = I18n()
+	if code == "not_own" or code == "no_room" or code == "no_coast" or code == "no_port" or code == "gold" then
+		return I.t("place_" .. code)
+	end
+	return I.t("place_invalid")
+end
+
 --- Where a build tap at `tile` really lands:
 ---   * near an own structure of the same upgradable kind -> upgrade it (tile = that structure);
 ---   * else the nearest valid site on the player's own land connected to the tap, within
@@ -842,7 +865,7 @@ function UIRules.resolve_placement(self: any, kind: string, tile: number): { [st
 		{ ok = false, tile = tile, reason = "", warn = "", upgrade = false, sid = 0, level = 1 } :: { [string]: any }
 	local s = ctx.state
 	if s == nil or tile < 0 then
-		out.reason = "Point at the globe"
+		out.reason = I18n().t("place_globe")
 		return out
 	end
 	if UIRules.is_nuke(kind) then
@@ -863,16 +886,16 @@ function UIRules.resolve_placement(self: any, kind: string, tile: number): { [st
 		out.tile = tile
 		out.code = code
 		if code == "" and not s.map:is_water(tile) then
-			out.reason = "Tap the sea where the warship should patrol"
+			out.reason = I18n().t("place_warship_tap")
 		elseif code ~= "" then
-			out.reason = UIRules.PLACE_REASONS[code] or "Can't build here"
+			out.reason = place_reason(code)
 		end
 		return out
 	end
 	-- Gold is shown on the slot itself; the preview still shows where it would go.
 	out.ok = code == "" or code == "gold"
 	out.tile = if rtile >= 0 then rtile else tile
-	out.reason = if code ~= "" then (UIRules.PLACE_REASONS[code] or "Can't build here") else ""
+	out.reason = if code ~= "" then place_reason(code) else ""
 	out.code = code
 	local sid = tonumber(r.upgrade_sid) or 0
 	if sid > 0 and s.structures[sid] ~= nil then
@@ -927,8 +950,9 @@ function UIRules._placement_exact(self: any, kind: string, tile: number): { [str
 	local ctx = self.ctx
 	local out = { ok = false, reason = "", warn = "" } :: { [string]: any }
 	local s = ctx.state
+	local I = I18n()
 	if s == nil or tile < 0 then
-		out.reason = "Point at the globe"
+		out.reason = I.t("place_globe")
 		return out
 	end
 	local map = s.map
@@ -936,32 +960,32 @@ function UIRules._placement_exact(self: any, kind: string, tile: number): { [str
 	local me = ctx:me()
 	if UIRules.is_nuke(kind) then
 		if own == me and own ~= 0 then
-			out.reason = "That is your own land"
+			out.reason = I.t("aim_own_land")
 			return out
 		end
 		if not map:is_land(tile) and kind ~= "mirv" then
-			out.warn = "Open water: little to hit"
+			out.warn = I.t("aim_water_warn")
 		end
 		if own ~= 0 and s:are_allies(me, own) then
-			out.warn = "Breaks your alliance with " .. s:owner_name(own)
+			out.warn = I.t("aim_break_warn", ctx:owner_name(own))
 		end
 		if kind == "mirv" and own == 0 then
-			out.reason = "Target a nation"
+			out.reason = I.t("aim_target_nation")
 			return out
 		end
 		if UIRules.is_strike(kind) then
 			-- a strike never hits an ally, and an air strike needs a ready airfield within reach
 			out.warn = ""
 			if own ~= 0 and s:are_allies(me, own) then
-				out.reason = "That is your ally's land"
+				out.reason = I.t("aim_ally_land")
 				return out
 			end
 			if kind == "airstrike" and not self:in_reach(Defs.S_AIRFIELD, Defs.N_AIRSTRIKE, tile) then
-				out.reason = "Out of your Airfields' reach"
+				out.reason = I.t("aim_out_airfield")
 				return out
 			end
 			if own == 0 then
-				out.warn = "Nobody's land: nothing to hit"
+				out.warn = I.t("aim_no_land_warn")
 			end
 		end
 		out.ok = true
@@ -971,16 +995,16 @@ function UIRules._placement_exact(self: any, kind: string, tile: number): { [str
 		if map:is_water(tile) or own == me then
 			out.ok = true
 		else
-			out.reason = "Target water near your ports"
+			out.reason = I.t("aim_near_ports")
 		end
 		return out
 	end
 	if own ~= me then
-		out.reason = "Build on your own land"
+		out.reason = I.t("place_not_own")
 		return out
 	end
 	if kind == "port" and not map:is_coastal(tile) then
-		out.reason = "Ports must be on the coast"
+		out.reason = I.t("place_no_coast")
 		return out
 	end
 	-- Same test as the Sim: no structure closer than STRUCT_MIN_DIST (latitude-corrected circle).
@@ -989,7 +1013,7 @@ function UIRules._placement_exact(self: any, kind: string, tile: number): { [str
 	local range_d2 = Defs.range_d2
 	for _, st in s.structures do
 		if range_d2(tile, st.tile) < min_d2 then
-			out.reason = "Too close to another structure"
+			out.reason = I.t("aim_too_close")
 			return out
 		end
 	end
@@ -1109,10 +1133,10 @@ function UIRules._primary(self: any, tile: number): { [string]: any }
 		if map:is_contestable(tile) and own == 0 and not s:has_fallout(tile) then
 			out.type = "spawn"
 			out.ok = true
-			out.verb = "Start here"
+			out.verb = I18n().t("act_start_here")
 			out.icon = "target"
 		else
-			out.reason = if map:is_land(tile) then "Pick unclaimed land" else "Pick land, not water"
+			out.reason = I18n().t(if map:is_land(tile) then "act_pick_land" else "act_not_water")
 		end
 		return out
 	end
@@ -1127,7 +1151,7 @@ function UIRules._primary(self: any, tile: number): { [string]: any }
 		return out
 	end
 	if not map:is_contestable(tile) then
-		out.reason = if ctx:terrain_at(tile) == Defs.T_ICECAP then "Antarctica cannot be claimed" else ""
+		out.reason = if ctx:terrain_at(tile) == Defs.T_ICECAP then I18n().t("act_antarctica") else ""
 		return out
 	end
 	-- Fallout stays until the land is conquered again; taking it is slow and costly.
@@ -1136,9 +1160,8 @@ function UIRules._primary(self: any, tile: number): { [string]: any }
 	local troops = (o.troops or 0) * share
 	out.troops = troops
 	if troops < 1.0 then
-		-- (the floor under a new player's army: UICtx.troop_floor)
 		out.floor = share < ctx.ratio
-		out.reason = if out.floor then UICtx.data("Tutorial").FLOOR_REASON else "No troops available"
+		out.reason = I18n().t("act_no_troops")
 		return out
 	end
 	local land = false
@@ -1153,7 +1176,9 @@ function UIRules._primary(self: any, tile: number): { [string]: any }
 	if land then
 		out.type = if own == 0 then "expand" else "attack"
 		out.ok = true
-		out.verb = if own == 0 then (if fallout then "Expand into fallout" else "Expand") else "Attack"
+		out.verb = if own == 0
+			then I18n().t(if fallout then "act_expand_fallout" else "act_expand")
+			else I18n().t("act_attack")
 		out.icon = "attack"
 		return out
 	end
@@ -1163,17 +1188,17 @@ function UIRules._primary(self: any, tile: number): { [string]: any }
 		local max_boats = Rules().MAX_BOATS_PLAYER
 		if self:transports() >= max_boats then
 			out.type = "boat"
-			out.reason = string.format("All %d transports at sea", max_boats)
+			out.reason = I18n().t("act_boats_busy", max_boats)
 			out.icon = "boat"
 			return out
 		end
 		out.type = "boat"
 		out.ok = true
-		out.verb = "Boat invasion"
+		out.verb = I18n().t("act_boat_inv")
 		out.icon = "boat"
 		return out
 	end
-	out.reason = if own == 0 then "Out of reach: expand toward it" else "No border or sea route"
+	out.reason = I18n().t(if own == 0 then "act_out_reach" else "act_no_route")
 	return out
 end
 
@@ -1191,21 +1216,21 @@ end
 
 --- Short sentence for the floating confirmation ("Attacking Brazil with 24.5K").
 function UIRules.confirm_text(self: any, action: { [string]: any }): string
-	local s = self.ctx.state
+	local I = I18n()
 	local troops = T().fmt_troops(tonumber(action.troops) or 0.0)
 	local target = tonumber(action.target) or 0
 	local ty = tostring(action.type or "")
 	if ty == "spawn" then
-		return "Starting position set"
+		return I.t("conf_spawn")
 	elseif ty == "expand" then
-		return "Expanding with " .. troops
+		return I.t("conf_expand", troops)
 	elseif ty == "attack" then
-		return string.format("Attacking %s with %s", s:owner_name(target), troops)
+		return I.t("conf_attack", self.ctx:owner_name(target), troops)
 	elseif ty == "boat" then
 		if target == 0 then
-			return "Boat launched with " .. troops
+			return I.t("conf_boat_land", troops)
 		end
-		return string.format("Invading %s by sea with %s", s:owner_name(target), troops)
+		return I.t("conf_boat_invade", self.ctx:owner_name(target), troops)
 	end
 	return ""
 end
@@ -1252,27 +1277,26 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 	local playing = s.phase == Defs.PHASE_PLAYING and ctx:alive_player() and not ctx:needs_spawn()
 	local land = s.map:is_contestable(tile)
 
+	local I = I18n()
 	if playing and land and own ~= me and not s:are_allies(me, own) then
 		local p = self:primary(tile)
 		local is_boat = tostring(p.type) == "boat"
-		local verb = if own == 0 then "Expand" else "Attack"
+		local verb = I.t(if own == 0 then "act_expand" else "act_attack")
 		local atk =
 			{ id = "attack", label = verb, icon = "attack", ok = p.ok and not is_boat, reason = "", danger = false }
 		if is_boat then
-			atk.reason = "No land border: send a boat"
+			atk.reason = I.t("rad_no_border")
 		elseif not p.ok then
 			atk.reason = tostring(p.reason)
 		end
 		table.insert(items, atk)
-		local boat = { id = "boat", label = "Boat", icon = "boat", ok = false, reason = "", danger = false }
+		local boat = { id = "boat", label = I.t("rad_boat"), icon = "boat", ok = false, reason = "", danger = false }
 		if self:boat_landing(tile) < 0 then
-			boat.reason = if s.map:is_coastal(tile)
-				then "None of your coasts reach it"
-				else "No coast of theirs within reach"
+			boat.reason = I.t(if s.map:is_coastal(tile) then "rad_no_coast_yours" else "rad_no_coast_theirs")
 		elseif self:transports() >= Rules().MAX_BOATS_PLAYER then
-			boat.reason = "All transports are at sea"
+			boat.reason = I.t("rad_all_boats")
 		elseif ctx:troops_for_ratio() < 1.0 then
-			boat.reason = "No troops available"
+			boat.reason = I.t("act_no_troops")
 		else
 			boat.ok = true
 		end
@@ -1284,7 +1308,7 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			if a.attacker == me and a.target == own then
 				table.insert(
 					items,
-					{ id = "retreat", label = "Retreat", icon = "retreat", ok = true, reason = "", danger = false }
+					{ id = "retreat", label = I.t("rad_retreat"), icon = "retreat", ok = true, reason = "", danger = false }
 				)
 				break
 			end
@@ -1307,7 +1331,7 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			local reason = if not av.ok then tostring(av.reason) else tostring(pl.reason)
 			table.insert(sub, {
 				id = "build:" .. k,
-				label = UIRules.SHORT[k],
+				label = self:short_of(k),
 				icon = k,
 				ok = ok,
 				reason = reason,
@@ -1319,7 +1343,7 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 		end
 		table.insert(
 			items,
-			{ id = "build", label = "Build", icon = "city", ok = true, reason = "", danger = false, sub = sub }
+			{ id = "build", label = I.t("rad_build"), icon = "city", ok = true, reason = "", danger = false, sub = sub }
 		)
 	end
 
@@ -1347,7 +1371,7 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			local ok2 = av2.ok and pl2.ok
 			table.insert(nsub, {
 				id = "nuke:" .. k2,
-				label = UIRules.SHORT[k2],
+				label = self:short_of(k2),
 				icon = k2,
 				ok = ok2,
 				reason = if not av2.ok then tostring(av2.reason) else tostring(pl2.reason),
@@ -1360,7 +1384,7 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 		local only_strikes = self:struct_count(Defs.S_SILO) == 0
 		table.insert(items, {
 			id = "nuke",
-			label = if only_strikes then "Strike" else "Nuke",
+			label = I.t(if only_strikes then "rad_strike" else "rad_nuke"),
 			icon = if only_strikes then launch_kinds[1] else "atom",
 			ok = true,
 			reason = "",
@@ -1375,10 +1399,10 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			local plan = self:donate_plan(own)
 			table.insert(items, {
 				id = "donate",
-				label = "Donate",
+				label = I.t("rad_donate"),
 				icon = "donate",
 				ok = plan.want >= 1 and not plan.full,
-				reason = if plan.want < 1 then "No troops to spare" elseif plan.full then "At their troop cap" else "",
+				reason = if plan.want < 1 then I.t("rad_no_spare") elseif plan.full then I.t("rad_ally_cap") else "",
 				danger = false,
 				troops = plan.amount,
 				capped = plan.capped,
@@ -1388,10 +1412,10 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			if ai ~= nil and ai.in_window then
 				table.insert(items, {
 					id = "ally_extend",
-					label = "Renew",
+					label = I.t("rad_renew"),
 					icon = "alliance",
 					ok = ai.can_extend,
-					reason = if ai.me_asked then "Renewal asked" else "",
+					reason = if ai.me_asked then I.t("rad_renew_asked") else "",
 					danger = false,
 				})
 			end
@@ -1399,21 +1423,21 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			if s:has_alliance(me, own) then
 				table.insert(
 					items,
-					{ id = "ally_break", label = "Betray", icon = "betray", ok = true, reason = "", danger = true }
+					{ id = "ally_break", label = I.t("rad_betray"), icon = "betray", ok = true, reason = "", danger = true }
 				)
 			end
 		elseif s:has_request(own, me) then
 			table.insert(
 				items,
-				{ id = "ally_accept", label = "Accept", icon = "alliance", ok = true, reason = "", danger = false }
+				{ id = "ally_accept", label = I.t("rad_accept"), icon = "alliance", ok = true, reason = "", danger = false }
 			)
 		elseif s:has_request(me, own) then
 			table.insert(items, {
 				id = "ally_request",
-				label = "Ally",
+				label = I.t("rad_ally"),
 				icon = "alliance",
 				ok = false,
-				reason = "Request pending",
+				reason = I.t("rad_pending"),
 				danger = false,
 			})
 		elseif target_info ~= nil and target_info.alive then
@@ -1421,18 +1445,18 @@ function UIRules.radial_items(self: any, tile: number): { { [string]: any } }
 			local wait = s:request_cooldown_left(me, own)
 			table.insert(items, {
 				id = "ally_request",
-				label = "Ally",
+				label = I.t("rad_ally"),
 				icon = "alliance",
 				ok = wait <= 0,
-				reason = if wait > 0 then string.format("Wait %ds", math.ceil(wait / Defs.TICK_RATE)) else "",
+				reason = if wait > 0 then I.t("rad_wait_s", math.ceil(wait / Defs.TICK_RATE)) else "",
 				danger = false,
 			})
 		end
 	end
 
-	table.insert(items, { id = "focus", label = "Focus", icon = "eye", ok = true, reason = "", danger = false })
+	table.insert(items, { id = "focus", label = I.t("rad_focus"), icon = "eye", ok = true, reason = "", danger = false })
 	if own ~= 0 then
-		table.insert(items, { id = "info", label = "Info", icon = "info", ok = true, reason = "", danger = false })
+		table.insert(items, { id = "info", label = I.t("rad_info"), icon = "info", ok = true, reason = "", danger = false })
 	end
 	return items
 end

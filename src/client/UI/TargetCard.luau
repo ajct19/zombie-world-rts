@@ -12,6 +12,7 @@ local GlassPanel = require("./GlassPanel")
 local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
 local Defs = UICtx.core("Defs")
+local I18n = UICtx.data("I18n")
 
 local _Rules = nil
 local function Rules()
@@ -103,21 +104,21 @@ function TargetCard.new(c: any)
 	self._warn:set_visible(false)
 	v:add_child(self._warn)
 	local btns = UITheme.hbox(8)
-	self._go = UITheme.button("Attack", "PrimaryButton", "attack", 48.0)
+	self._go = UITheme.button(I18n.t("act_attack"), "PrimaryButton", "attack", 48.0)
 	self._go:set_font_size(15)
 	self._go.size_flags_horizontal = W.EXPAND_FILL
 	self._go.pressed:Connect(function()
 		self:_on_go()
 	end)
 	btns:add_child(self._go)
-	self._donate = UITheme.button("Donate", "GlassButton", "donate", 48.0)
+	self._donate = UITheme.button(I18n.t("tc_donate"), "GlassButton", "donate", 48.0)
 	self._donate:set_font_size(13)
 	self._donate.pressed:Connect(function()
 		self.donate:Fire()
 	end)
 	self._donate:set_visible(false)
 	btns:add_child(self._donate)
-	self._ally = UITheme.button("Ally", "GlassButton", "alliance", 48.0)
+	self._ally = UITheme.button(I18n.t("rad_ally"), "GlassButton", "alliance", 48.0)
 	self._ally:set_font_size(13)
 	self._ally.pressed:Connect(function()
 		self.ally:Fire()
@@ -126,14 +127,14 @@ function TargetCard.new(c: any)
 	v:add_child(btns)
 	-- Confirmation row: break without attacking, or keep the alliance.
 	self._btns2 = UITheme.hbox(8)
-	self._break_only = UITheme.button("Break only", "GlassButton", "betray", 44.0)
+	self._break_only = UITheme.button(I18n.t("tc_break_only"), "GlassButton", "betray", 44.0)
 	self._break_only:set_font_size(13)
 	self._break_only.size_flags_horizontal = W.EXPAND_FILL
 	self._break_only.pressed:Connect(function()
 		self.betray:Fire(false)
 	end)
 	self._btns2:add_child(self._break_only)
-	self._keep = UITheme.button("Keep ally", "GlassButton", "alliance", 44.0)
+	self._keep = UITheme.button(I18n.t("tc_keep_ally"), "GlassButton", "alliance", 44.0)
 	self._keep:set_font_size(13)
 	self._keep.size_flags_horizontal = W.EXPAND_FILL
 	self._keep.pressed:Connect(function()
@@ -157,6 +158,7 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 	end
 	self.tile = t
 	self.kind = k
+	self._last_act = act
 	self.confirming = false
 	self.owner_id = s:tile_owner(t)
 	self.shown_msec = UICtx.msec()
@@ -167,7 +169,7 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		local o = s:get_owner(self.owner_id)
 		UITheme.set_swatch_color(self._sw, if o ~= nil then o.color else UITheme.TEXT)
 		self._sw:set_visible(true)
-		self._name:set_text(s:owner_name(self.owner_id))
+		self._name:set_text(ctx:owner_name(self.owner_id))
 		local rel = ctx:relation(self.owner_id)
 		self._badge:set_visible(rel ~= "")
 		local rc = ctx:relation_color(rel)
@@ -180,17 +182,17 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		self._sub:set_text(
 			string.format("%s  ·  %s", ctx:kind_title(if o ~= nil then o.kind else 0), ctx:terrain_title(t))
 		)
-		self._troops:set_text("Troops " .. UITheme.fmt_troops(if o ~= nil then o.troops else 0))
-		self._land:set_text("Land " .. UITheme.fmt_pct(s:land_share(self.owner_id)))
+		self._troops:set_text(I18n.t("ui_troops") .. " " .. UITheme.fmt_troops(if o ~= nil then o.troops else 0))
+		self._land:set_text(I18n.t("ui_land") .. " " .. UITheme.fmt_pct(s:land_share(self.owner_id)))
 		local mine = tonumber(act.troops) or 0.0
 		local theirs = if o ~= nil then o.troops else 0
 		self._odds:set_visible(true)
 		if theirs > mine * 1.5 then
-			self._odds:set_text(string.format("They outnumber the %s troops you would send", troops))
+			self._odds:set_text(I18n.t("tc_outnumber", troops))
 			self._odds:set_color(UITheme.ORANGE)
 			self._odds_warn = true
 		else
-			self._odds:set_text(string.format("You would send %s troops", troops))
+			self._odds:set_text(I18n.t("tc_send_fmt", troops))
 			self._odds:set_color(UITheme.TEXT_3)
 			self._odds_warn = false
 		end
@@ -198,13 +200,13 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		self._ally:set_disabled(s:has_request(ctx:me(), self.owner_id))
 	else
 		self._sw:set_visible(false)
-		self._name:set_text("Unclaimed land")
+		self._name:set_text(I18n.t("ui_unclaimed"))
 		self._badge:set_visible(false)
-		self._sub:set_text(ctx:terrain_title(t) .. "  ·  across the sea")
+		self._sub:set_text(ctx:terrain_title(t) .. "  ·  " .. I18n.t("tc_across_sea"))
 		self._troops:set_text("")
 		self._land:set_text("")
 		self._odds:set_visible(true)
-		self._odds:set_text(string.format("A transport lands %s troops here", troops))
+		self._odds:set_text(I18n.t("tc_boat_fmt", troops))
 		self._odds:set_color(UITheme.TEXT_3)
 		self._odds_warn = false
 		self._ally:set_visible(false)
@@ -215,17 +217,17 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		local oa = s:get_owner(self.owner_id)
 		plan = if ctx.rules ~= nil then ctx.rules:donate_plan(self.owner_id) else nil
 		-- Near their troop cap: say how much still fits (a gift above the cap evaporates).
-		local who = if s:same_team(ctx:me(), self.owner_id) then "Your teammate" else "Your ally"
+		local who = I18n.t(if s:same_team(ctx:me(), self.owner_id) then "tc_your_team" else "tc_your_ally")
 		self._sub:set_text(
 			if plan ~= nil and plan.capped
-				then string.format(
-					"%s · %s troops · room for %s",
+				then I18n.t(
+					"tc_room_for_fmt",
 					who,
 					UITheme.fmt_troops(if oa ~= nil then oa.troops else 0),
 					UITheme.fmt_troops(plan.room)
 				)
-				else string.format(
-					"%s · %s troops · %s land",
+				else I18n.t(
+					"tc_land_line_fmt",
 					who,
 					UITheme.fmt_troops(if oa ~= nil then oa.troops else 0),
 					UITheme.fmt_pct(s:land_share(self.owner_id))
@@ -237,8 +239,8 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 	if c and self.owner_id ~= 0 and self.kind ~= "ally" then
 		local o2 = s:get_owner(self.owner_id)
 		self._sub:set_text(
-			string.format(
-				"%s · %s troops · %s land",
+			I18n.t(
+				"tc_land_line_fmt",
 				ctx:kind_title(if o2 ~= nil then o2.kind else 0),
 				UITheme.fmt_troops(if o2 ~= nil then o2.troops else 0),
 				UITheme.fmt_pct(s:land_share(self.owner_id))
@@ -247,7 +249,7 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		self._odds:set_visible(self._odds_warn)
 	elseif c and self.owner_id == 0 then
 		self._odds:set_visible(false)
-		self._sub:set_text(string.format("%s · across the sea · lands %s troops", ctx:terrain_title(t), troops))
+		self._sub:set_text(I18n.t("tc_compact_sea_fmt", ctx:terrain_title(t), troops))
 	end
 	for _, b in ipairs({ self._go, self._ally }) do
 		b:set_min_height(if c then 44.0 else 48.0)
@@ -260,7 +262,11 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		if c then 4.0 else 12.0,
 		if c then 8.0 else 10.0
 	)
-	local verb = if self.kind == "attack" then "Attack" else "Invade"
+	self._donate:set_text(I18n.t("tc_donate"))
+	self._ally:set_text(I18n.t("rad_ally"))
+	self._break_only:set_text(I18n.t("tc_break_only"))
+	self._keep:set_text(I18n.t("tc_keep_ally"))
+	local verb = I18n.t(if self.kind == "attack" then "act_attack" else "tc_invade")
 	self._go:set_text(string.format("%s · %s", verb, troops))
 	self._go:set_icon(if self.kind == "attack" then "attack" else "boat")
 	self:_set_variation(self._go, "PrimaryButton")
@@ -277,9 +283,9 @@ function TargetCard.show_target(self, t: number, k: string, act: any)
 		self._donate:set_visible(true)
 		local amt = if plan ~= nil then plan.amount else ctx:troops_for_ratio()
 		local full = plan ~= nil and plan.full
-		self._donate:set_text(if full then "At troop cap" else "Donate " .. UITheme.fmt_troops(amt))
+		self._donate:set_text(if full then I18n.t("rad_ally_cap") else I18n.t("tc_donate_amt", UITheme.fmt_troops(amt)))
 		self._donate:set_disabled(amt < 1.0 or full)
-		self._go:set_text("Break alliance")
+		self._go:set_text(I18n.t("tc_break_btn"))
 		self._go:set_icon("betray")
 		self:_set_variation(self._go, "DangerButton")
 		self._panel:set_accent(UITheme.VIOLET)
@@ -328,9 +334,9 @@ function TargetCard.confirm_betray(self)
 	self._age = 0.0
 	local secs = Defs.round(R.TRAITOR_TICKS / R.TICK_RATE)
 	self._warn:set_text(
-		string.format(
-			"Break the alliance with %s? For %d s you are a TRAITOR: every nation sees it and attacks on you cost only %d%% of the troops.",
-			if ctx.state ~= nil then ctx.state:owner_name(self.owner_id) else "them",
+		I18n.t(
+			"tc_betray_confirm",
+			if ctx.state ~= nil then ctx:owner_name(self.owner_id) else I18n.t("tc_them"),
 			secs,
 			Defs.round(R.TRAITOR_DEFENSE_DEBUFF * 100.0)
 		)
@@ -339,11 +345,26 @@ function TargetCard.confirm_betray(self)
 	self._sub:set_visible(false)
 	self._donate:set_visible(false)
 	self._btns2:set_visible(true)
-	self._go:set_text("Betray & attack · " .. UITheme.fmt_troops(ctx:troops_for_ratio()))
+	self._go:set_text(I18n.t("tc_betray_go", UITheme.fmt_troops(ctx:troops_for_ratio())))
 	self._go:set_icon("attack")
 	self._panel:set_accent(UITheme.RED)
 	self:place()
 	ctx:sfx("open", -8.0)
+end
+
+function TargetCard.refresh_locale(self)
+	if self.is_open and self.tile >= 0 and self._last_act ~= nil then
+		local was_conf = self.confirming
+		self:show_target(self.tile, self.kind, self._last_act)
+		if was_conf then
+			self:confirm_betray()
+		end
+	else
+		self._donate:set_text(I18n.t("tc_donate"))
+		self._ally:set_text(I18n.t("rad_ally"))
+		self._break_only:set_text(I18n.t("tc_break_only"))
+		self._keep:set_text(I18n.t("tc_keep_ally"))
+	end
 end
 
 function TargetCard._on_go(self)

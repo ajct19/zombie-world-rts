@@ -1708,9 +1708,10 @@ function Sim._eliminate(self: any, id: number, killer: number)
 	local o_name = self.o_name
 	if killer > 0 then
 		self:_conquest_gold(id, killer)
-		if self.o_kind[id] == Defs.KIND_TRIBE and self:is_infected(killer) then
+		if self:is_infected(killer) then
+			local surge = if self.o_kind[id] == Defs.KIND_TRIBE then Rules.ZOMBIE_TRIBE_SURGE else Rules.ZOMBIE_NATION_SURGE
 			local cap_lim = math.max(self.o_cap[killer], Rules.START_TROOPS_ZOMBIE) * Rules.ZOMBIE_OVERCAP_MULT
-			self.o_troops[killer] = math.min(cap_lim, self.o_troops[killer] + Rules.ZOMBIE_TRIBE_SURGE)
+			self.o_troops[killer] = math.min(cap_lim, self.o_troops[killer] + surge)
 		end
 		self:msg(killer, Defs.MSG_GOOD, "You eliminated " .. o_name[id])
 	end
@@ -1754,6 +1755,8 @@ function Sim._spawn_outbreaks(self: any, count: number)
 	local r = self.R.SPAWN_RADIUS
 	local far_d = 25.0 * self.R.LEGACY_LIN
 	local near_d = 12.0 * self.R.LEGACY_LIN
+	local reg_min = 32.0 * self.R.LEGACY_LIN
+	local reg_max = 95.0 * self.R.LEGACY_LIN
 	local human_tiles = {}
 	for _, h in self.humans do
 		if self.o_alive[h] == 1 and self.o_spawned[h] == 1 and self.o_spawn_tile[h] >= 0 then
@@ -1765,23 +1768,30 @@ function Sim._spawn_outbreaks(self: any, count: number)
 		if self.owner_total >= Defs.MAX_OWNERS - 1 then
 			break
 		end
+		local hive_r = if spawned == 0 then math.max(r * 2.2, 8.0 / self.R.K_LIN) else math.max(r * 1.4, 5.0 / self.R.K_LIN)
 		local pick = -1
-		for pass = 1, 2 do
-			local min_dist = if pass == 1 then far_d else near_d
-			local tries = if pass == 1 then 400 else 250
+		local start_pass = if spawned == 0 and #human_tiles > 0 then 0 else 1
+		for pass = start_pass, 2 do
+			local min_dist = if pass == 0 then reg_min elseif pass == 1 then far_d else near_d
+			local tries = if pass == 0 then 280 elseif pass == 1 then 400 else 250
 			for _ = 1, tries do
 				local c = rng:randi() % N
 				if not self:claimable(c) or readi32(owner, c * 4) ~= 0 or self:_owned_near(c) then
 					continue
 				end
 				local too_close = false
+				local in_region = pass ~= 0
 				for _, ht in human_tiles do
-					if geo_manhattan(ht, c) < min_dist then
+					local d = geo_manhattan(ht, c)
+					if d < min_dist then
 						too_close = true
 						break
 					end
+					if pass == 0 and d <= reg_max then
+						in_region = true
+					end
 				end
-				if not too_close and self:_spawn_disk_free(c, r) then
+				if not too_close and in_region and self:_spawn_disk_free(c, hive_r) then
 					pick = c
 					break
 				end
@@ -1808,7 +1818,7 @@ function Sim._spawn_outbreaks(self: any, count: number)
 		self.o_team[id] = Defs.TEAM_ZOMBIE
 		self:ev({ Ev.OWNER_ADD, id, name, col, Defs.KIND_ZOMBIE, Defs.TEAM_ZOMBIE })
 		self.o_troops[id] = Rules.START_TROOPS_ZOMBIE
-		self:_spawn_owner(id, pick, r)
+		self:_spawn_owner(id, pick, hive_r)
 		self.o_cap[id] = self.R.max_troops(Defs.KIND_ZOMBIE, self.o_tiles[id], 0, self.difficulty)
 		self.ai:register_zombie(self, id)
 		table.insert(human_tiles, pick)
@@ -1902,7 +1912,7 @@ function Sim._zombie_tick(self: any)
 		return
 	end
 	if not self.outbreak_spawned and self.tick >= self.outbreak_tick then
-		self:_spawn_outbreaks(if self.solo then 2 else 3)
+		self:_spawn_outbreaks(if self.solo then 4 else 5)
 		self.outbreak_spawned = true
 		self._d_outbreak = true
 		self._force_stats = true

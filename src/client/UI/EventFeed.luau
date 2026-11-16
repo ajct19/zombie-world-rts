@@ -15,6 +15,7 @@ local UITheme = require("./UITheme")
 local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
 local FillBar = require("./FillBar")
+local I18n = require("./UICtx").data("I18n")
 
 local EventFeed = W.class(W.Control)
 
@@ -363,10 +364,10 @@ end
 function EventFeed.alliance_request(self, from_id: number)
 	local ctx = self.ctx
 	self:_ally_card(from_id, from_id, {
-		text = "proposes an alliance",
-		row_text = "wants an alliance",
-		yes = "Accept",
-		no = "Decline",
+		text = I18n.t("feed_ally_prop"),
+		row_text = I18n.t("feed_ally_wants"),
+		yes = I18n.t("feed_accept"),
+		no = I18n.t("feed_decline"),
 		on_yes = function()
 			ctx:send({ type = "ally_reply", target = from_id, accept = true })
 		end,
@@ -385,10 +386,10 @@ function EventFeed.alliance_renewal(self, other: number, expires_at: number, oth
 	local ctx = self.ctx
 	local window = UITheme.core("Rules").ALLIANCE_EXTEND_WINDOW_TICKS
 	self:_ally_card(-other, other, {
-		text = if other_asked then "wants to renew your alliance" else "alliance is about to expire",
-		row_text = if other_asked then "wants to renew" else "alliance expiring",
-		yes = "Renew",
-		no = "Ignore",
+		text = I18n.t(if other_asked then "feed_renew_other" else "feed_renew_exp"),
+		row_text = I18n.t(if other_asked then "feed_renew_short_o" else "feed_renew_short_e"),
+		yes = I18n.t("feed_renew"),
+		no = I18n.t("feed_ignore"),
 		on_yes = function()
 			ctx:send({ type = "ally_extend", target = other })
 		end,
@@ -434,7 +435,8 @@ function EventFeed._ally_card(self, key: number, owner_id: number, spec: { [stri
 	tv.size_flags_horizontal = W.EXPAND_FILL
 	local nr = T.hbox(6)
 	nr:add_child(T.swatch(o.color, 10.0, 3))
-	local nl = T.label(o.name, 14, 700)
+	local disp = I18n.owner_name(o.name)
+	local nl = T.label(disp, 14, 700)
 	nl.text_overrun_behavior = W.OVERRUN_ELLIPSIS
 	nl.size_flags_horizontal = W.EXPAND_FILL
 	nl:set_min_size(Vector2.new(60, 0))
@@ -494,9 +496,10 @@ function EventFeed._alliance_row(self, key: number, o: any, spec: { [string]: an
 	local sw = T.swatch(o.color, 8.0, 2)
 	sw.size_flags_vertical = W.SHRINK_CENTER
 	row:add_child(sw)
-	local nl = T.label(o.name, fs + 1, 700)
+	local disp = I18n.owner_name(o.name)
+	local nl = T.label(disp, fs + 1, 700)
 	nl.text_overrun_behavior = W.OVERRUN_ELLIPSIS
-	nl:set_min_size(Vector2.new(math.min(T.measure_text(o.name, fs + 1, 700) + 2.0, 100.0), 0))
+	nl:set_min_size(Vector2.new(math.min(T.measure_text(disp, fs + 1, 700) + 2.0, 100.0), 0))
 	nl.size_flags_vertical = W.SHRINK_CENTER
 	row:add_child(nl)
 	local wl = T.label(spec.row_text, fs, 500, T.TEXT_2)

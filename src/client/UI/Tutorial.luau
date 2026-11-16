@@ -27,6 +27,7 @@ local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
 local Defs = UICtx.core("Defs")
 local Data = UICtx.data("Tutorial")
+local I18n = UICtx.data("I18n")
 
 local Tutorial = W.class(W.Control)
 
@@ -68,7 +69,7 @@ function Tutorial.new(c: any, ui: any)
 	self._tap = UICtx.make("TextLabel", {
 		BackgroundColor3 = Color3.fromRGB(14, 20, 38),
 		BackgroundTransparency = 0.15,
-		Text = "Tap here",
+		Text = I18n.t("tut_tap_here"),
 		FontFace = Font.fromId(12187365977, Enum.FontWeight.Bold),
 		TextSize = 13,
 		TextColor3 = Color3.new(1, 1, 1),
@@ -119,7 +120,7 @@ function Tutorial.new(c: any, ui: any)
 	self._bar:set_mouse_filter(W.MOUSE_IGNORE)
 	v:add_child(self._bar)
 	h:add_child(v)
-	self._skip = UITheme.button("Skip", "GhostButton", "", 36.0)
+	self._skip = UITheme.button(I18n.t("tut_skip"), "GhostButton", "", 36.0)
 	self._skip:set_font_size(12)
 	self._skip:set_min_size(Vector2.new(52, 36))
 	self._skip.size_flags_vertical = W.SHRINK_CENTER
@@ -159,7 +160,7 @@ function Tutorial.begin(self)
 	local ctx = self.ctx
 	ctx.ratio_max = 1.0
 	ctx:set_ratio(UICtx.DEFAULT_RATIO)
-	ctx:set_ratio_max(Data.RATIO_CAP)
+	ctx:set_ratio_max(1.0)
 	ctx.troop_floor = nil
 end
 
@@ -175,11 +176,9 @@ function Tutorial.stop(self, how: string)
 		-- the last card: the reward, and where it goes
 		self._ending = Tutorial.END_S
 		self._count:set_text("★")
-		self._text:set_text(
-			string.format("Tutorial complete! +%s Stars\nSpend them in the ARSENAL", UICtx.commas(Data.STARS))
-		)
+		self._text:set_text(I18n.t("tut_done_fmt", UICtx.commas(Data.STARS)))
 		self._bar:set_visible(false)
-		self._skip:set_text("OK")
+		self._skip:set_text(I18n.t("tut_ok"))
 		self:_tint(UITheme.GREEN)
 		self._card:set_visible(true)
 		self:_place()
@@ -292,19 +291,50 @@ function Tutorial._find_spot(self): number?
 	return best
 end
 
+function Tutorial._step_text(self, i: number, arg: string?): string
+	local step = Data.STEPS[i]
+	local key = "tut_" .. step.id .. (if self.ctx.touch then "_t" else "_d")
+	local txt = I18n.t(key)
+	if string.find(txt, "%s", 1, true) then
+		txt = string.format(txt, I18n.owner_name(arg or I18n.t("tc_them")))
+	end
+	return txt
+end
+
+function Tutorial.refresh_locale(self)
+	if self._ending > 0.0 then
+		self._text:set_text(I18n.t("tut_done_fmt", UICtx.commas(Data.STARS)))
+		self._skip:set_text(I18n.t("tut_ok"))
+		return
+	end
+	if not self.active then
+		self._skip:set_text(I18n.t("tut_skip"))
+		return
+	end
+	self._skip:set_text(I18n.t("tut_skip"))
+	local step = Data.STEPS[self._i]
+	if step ~= nil and self._flash <= 0.0 then
+		if step.id == "grow" then
+			self._text:set_text(if self._ready then self:_step_text(self._i) else I18n.t("tut_grow_wait"))
+		elseif step.id == "ratio" and self._ratio_high then
+			self._text:set_text(I18n.t("tut_too_much"))
+		else
+			self._text:set_text(self:_step_text(self._i, self._say_arg))
+		end
+	end
+end
+
 function Tutorial._say(self, i: number, arg: string?)
 	local step = Data.STEPS[i]
-	local txt = if self.ctx.touch then step.touch else step.desktop
-	if string.find(txt, "%s", 1, true) then
-		txt = string.format(txt, arg or "them")
-	end
+	self._say_arg = arg
+	local txt = self:_step_text(i, arg)
 	self._count:set_text(string.format("%d / %d", i, #Data.STEPS))
 	self._text:set_text(txt)
 	self._bar:set_visible(step.bar == true)
 	self._fill.Size = UDim2.fromScale(0, 1)
 	self._fill.BackgroundColor3 = UITheme.AMBER
 	self._fill_f = 0.0
-	self._skip:set_text("Skip")
+	self._skip:set_text(I18n.t("tut_skip"))
 	self:_tint(UITheme.AMBER)
 	self._card:set_visible(i > 1)
 	if i > 1 then
@@ -321,7 +351,7 @@ function Tutorial._advance(self, passed: boolean?)
 		self.ctx:sfx("confirm", -4.0)
 		if self._card.visible then
 			self:_tint(UITheme.GREEN)
-			self._text:set_text("Nice!")
+			self._text:set_text(I18n.t("tut_nice"))
 			self._bar:set_visible(false)
 			self._flash = Tutorial.DONE_S
 		end
@@ -375,14 +405,7 @@ function Tutorial._process(self, delta: number)
 	local o = ctx:my()
 	local any, on_owner, on_land = self:_orders()
 	self._step_t += delta
-	if
-		ctx.troop_floor == nil
-		and i >= (Data.step_index(Data.FLOOR_FROM) or 1)
-		and o ~= nil
-		and Data.floor_armed(o.troops or 0, o.max_troops or 0, ctx:alive_seconds())
-	then
-		ctx.troop_floor = Data.TROOP_FLOOR
-	end
+	-- Keep troop_floor nil so attacking at high ratios (e.g. 75%) is never held back.
 	if not self._started and self._step_t > 1.0 then
 		-- the match is up (and reported: the server logs a step for a match it knows of)
 		self._started = true
@@ -472,7 +495,7 @@ function Tutorial._process(self, delta: number)
 				if self._taps >= Data.GROW_TAPS then
 					self:_advance()
 					if early and self._card.visible then
-						self._text:set_text(step.early)
+						self._text:set_text(I18n.t("tut_grow_early"))
 						self._flash = Data.EARLY_S
 					end
 					return
@@ -492,7 +515,7 @@ function Tutorial._process(self, delta: number)
 				self._ready = ready
 				self._fill.BackgroundColor3 = if ready then UITheme.GREEN else UITheme.AMBER
 			end
-			local line = if ready then (if ctx.touch then step.touch else step.desktop) else step.wait
+			local line = if ready then self:_step_text(i) else I18n.t("tut_grow_wait")
 			if line ~= self._line then
 				self._line = line
 				self._text:set_text(line)
@@ -508,7 +531,7 @@ function Tutorial._process(self, delta: number)
 					local r = tc:get_global_rect()
 					point = UICtx.rect_center(r)
 					around = math.max(r.Width, r.Height) * 0.5
-					word = "Refilling"
+					word = I18n.t("tut_refilling")
 				end
 			elseif self._taps == 0 or self._idle > Data.NUDGE_S then
 				point = ui.advisor:frontier_point()
@@ -528,9 +551,7 @@ function Tutorial._process(self, delta: number)
 			local high = r > Data.RATIO_HIGH
 			if high ~= self._ratio_high then
 				self._ratio_high = high
-				self._text:set_text(
-					if high then Data.RATIO_TOO_MUCH elseif ctx.touch then step.touch else step.desktop
-				)
+				self._text:set_text(if high then I18n.t("tut_too_much") else self:_step_text(i))
 				self:_tint(if high then UITheme.RED else UITheme.AMBER)
 			end
 			-- the mark goes around the stop to tap
@@ -555,7 +576,7 @@ function Tutorial._process(self, delta: number)
 					return
 				else
 					-- no neighbour yet: keep growing towards one
-					self._text:set_text(if ctx.touch then "Keep growing until you meet a neighbour" else "Keep growing until you meet a neighbour")
+					self._text:set_text(I18n.t("tut_keep_growing"))
 					if self._idle > Data.NUDGE_S then
 						point = ui.advisor:frontier_point()
 					end
@@ -641,7 +662,7 @@ function Tutorial._draw_mark(self, p: Vector2, word: string?, around: number?)
 	(self._ring_b:FindFirstChild("Stroke") :: UIStroke).Transparency = 1 - k2 * 0.95
 	self._dot.Visible = around == nil
 	UICtx.set_circle(self._dot, p, 6.0)
-	self._tap.Text = word or (if ctx.touch then "Tap here" else "Click here")
+	self._tap.Text = word or I18n.t(if ctx.touch then "tut_tap_here" else "tut_click_here")
 	-- (under the mark; over it when the mark is near the bottom of the screen, on the command bar)
 	local gap = outer + 6.0
 	local below = p.Y + gap + 26 < ctx.vp.Y - ctx.insets.w

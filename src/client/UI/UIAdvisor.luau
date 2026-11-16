@@ -5,6 +5,7 @@
 
 local UICtx = require("./UICtx") :: any
 local Defs = UICtx.core("Defs")
+local I18n = UICtx.data("I18n")
 
 local _T: any = nil
 local function T(): any
@@ -117,12 +118,7 @@ function UIAdvisor.check_threats(self: any)
 		local ratio_x = math.floor(worst_troops / math.max(o.troops, 1))
 		self.ui.feed:toast(
 			Defs.MSG_BAD,
-			string.format(
-				"%s (%s troops) borders you with %d× your army. Fortify or find allies.",
-				s:owner_name(worst),
-				T().fmt_troops(worst_troops),
-				ratio_x
-			),
+			I18n.t("adv_big_neighbor", ctx:owner_name(worst), T().fmt_troops(worst_troops), ratio_x),
 			"defense"
 		)
 	end
@@ -180,21 +176,8 @@ end
 --- army's cap at home, from the time it arms (Data/Tutorial.floor_armed: FLOOR_ARM of the cap, or
 --- FLOOR_ARM_S seconds in play) (UICtx.troop_floor; UIRoot clears it for every new match).
 function UIAdvisor.check_floor(self: any)
-	local ui = self.ui
-	local ctx = self.ctx
-	-- (first: the seconds count from the nation's first second in play, the tutorial's too)
-	local played = ctx:alive_seconds()
-	if ctx.troop_floor ~= nil or (ui.tutorial ~= nil and ui.tutorial.active) or not ctx:alive_player() then
-		return
-	end
-	local o = ctx:my()
-	local Tut = UICtx.data("Tutorial")
-	if o == nil or not Tut.rookie(ui.telemetry:matches_before()) then
-		return
-	end
-	if Tut.floor_armed(o.troops or 0, o.max_troops or 0, played) then
-		ctx.troop_floor = Tut.ROOKIE_FLOOR
-	end
+	-- Disabled: attacking at high ratios (e.g. 75%) must fire on the first click without hidden clamping.
+	return
 end
 
 --- The floor held an order back (UICtx.floor_held): the first time in a match, and then at most
@@ -526,20 +509,27 @@ function UIAdvisor._note_intercept(self: any, kind: number, nuke_owner: number, 
 		self._volleys[nuke_owner] = v
 		return
 	end
-	local what = if kind >= 0 and kind < Defs.NUKE_KIND_COUNT then Defs.NUKE_TITLES[kind] else "nuke"
+	local what = if kind >= 0 and kind < Defs.NUKE_KIND_COUNT then I18n.nuke_title(kind) else I18n.t("rad_nuke")
+	if what == "" then
+		what = I18n.t("rad_nuke")
+	end
 	if not self:cooldown(string.format("icpt:%d:%d", sam_owner, nuke_owner), 2500) then
 		return
 	end
 	if sam_owner == me then
 		self.ui.feed:toast(
 			Defs.MSG_GOOD,
-			string.format("Your SAM shot down %s's %s", s:owner_name(nuke_owner), what),
+			I18n.t("adv_sam_down", ctx:owner_name(nuke_owner), what),
 			"sam"
 		)
 	else
 		self.ui.feed:toast(
 			Defs.MSG_BAD,
-			string.format("%s's SAM intercepted your %s", if sam_owner ~= 0 then s:owner_name(sam_owner) else "A", what),
+			I18n.t(
+				"adv_sam_enemy",
+				if sam_owner ~= 0 then ctx:owner_name(sam_owner) else I18n.t("adv_sam_a"),
+				what
+			),
 			"sam"
 		)
 	end
@@ -578,18 +568,13 @@ function UIAdvisor.flush_volleys(self: any)
 		if v.down_by_me > 0 then
 			self.ui.feed:toast(
 				Defs.MSG_GOOD,
-				string.format(
-					"Your SAMs shot down %d of %d warheads from %s",
-					v.down_by_me,
-					total,
-					s:owner_name(owner_id)
-				),
+				I18n.t("adv_sam_volley_you", v.down_by_me, total, ctx:owner_name(owner_id)),
 				"sam"
 			)
 		elseif v.down_mine > 0 then
 			self.ui.feed:toast(
 				Defs.MSG_BAD,
-				string.format("SAMs shot down %d of your %d warheads", v.down_mine, total),
+				I18n.t("adv_sam_volley_enemy", v.down_mine, total),
 				"sam"
 			)
 		end
@@ -615,7 +600,7 @@ function UIAdvisor.on_attack_started(self: any, aid: number)
 		if att ~= nil and self:cooldown("atk:" .. a.attacker, 20000) then
 			ui.feed:toast(
 				Defs.MSG_ALERT,
-				string.format("%s (%s) is attacking you!", att.name, T().fmt_troops(att.troops)),
+				I18n.t("adv_atk_you_troops", I18n.owner_name(att.name), T().fmt_troops(att.troops)),
 				"attack"
 			)
 		end
@@ -659,28 +644,24 @@ function UIAdvisor.on_alliance_changed(
 		return
 	end
 	local other = if a == me then b else a
-	local nm = ctx.state:owner_name(other)
+	local nm = ctx:owner_name(other)
 	ui.feed:close_request(other)
 	if formed then
 		ctx:sfx("alliance")
-		ui.feed:toast(Defs.MSG_ALLIANCE, "Alliance formed with " .. nm, "alliance")
+		ui.feed:toast(Defs.MSG_ALLIANCE, I18n.t("adv_ally_formed", nm), "alliance")
 	elseif traitor == me then
 		ctx:sfx("betrayal")
 		ui.feed:toast(
 			Defs.MSG_BAD,
-			string.format(
-				"You broke your alliance with %s. For %d s you are a Traitor: attacks on you cost half the troops.",
-				nm,
-				Rules().TRAITOR_TICKS // Defs.TICK_RATE
-			),
+			I18n.t("adv_betrayed_self", nm, Rules().TRAITOR_TICKS // Defs.TICK_RATE),
 			"betray"
 		)
 	elseif traitor == other then
 		ctx:sfx("betrayal")
-		ui.feed:toast(Defs.MSG_ALERT, nm .. " betrayed you!", "betray")
+		ui.feed:toast(Defs.MSG_ALERT, I18n.t("adv_betrayed_by", nm), "betray")
 	elseif not expired then
 		-- (an expiry is announced by the Sim's own message)
-		ui.feed:toast(Defs.MSG_INFO, "Your alliance with " .. nm .. " has ended", "alliance")
+		ui.feed:toast(Defs.MSG_INFO, I18n.t("adv_ally_ended", nm), "alliance")
 	end
 	ui.feed:close_renewal(other)
 	ui.bar:refresh_buttons()
@@ -707,6 +688,165 @@ function UIAdvisor._naval_sfx(text: string): string
 	return ""
 end
 
+local function translate_sim_msg(text: string): string
+	if I18n.get() ~= "ru" then
+		return text
+	end
+	local exact: { [string]: string } = {
+		["That land was just taken — pick another spot"] = "Эту землю только что заняли — выберите другую точку",
+		["You didn't pick a start, so you were placed here."] = "Вы не выбрали точку — столица размещена автоматически.",
+		["That land isn't next to yours — send a boat"] = "Эта земля не граничит с вашей — отправьте десант",
+		["Your nation has fallen"] = "Ваша держава пала",
+		["Your army is already at its cap"] = "Ваша армия уже на максимуме",
+		["Not enough gold for Reinforcements"] = "Недостаточно золота для Подкрепления",
+		["Boats can only land on a coast"] = "Десант может высадиться только на берег",
+		["Too many transports at sea"] = "Слишком много транспортов в море",
+		["Too many boat orders at once — wait a moment"] = "Слишком много приказов десанта — подождите",
+		["You have no coast on that sea"] = "У вас нет берега на этом море",
+		["No sea route to that coast"] = "Нет морского пути к этому берегу",
+		["Your transport returned its troops home"] = "Транспорт вернул войска домой",
+		["Your transport could not land"] = "Ваш десант не смог высадиться",
+		["Your transport landed"] = "Ваш десант высадился",
+		["A teammate's building is too close"] = "Постройка союзника слишком близко",
+		["Ports must be built on your coast"] = "Порт можно строить только на берегу",
+		["You can only build on your own land"] = "Строить можно только на своей земле",
+		["You need a port on that sea to build warships"] = "Нужен порт на этом море для постройки корабля",
+		["Not enough gold for a Warship"] = "Недостаточно золота для Военного корабля",
+	}
+	if exact[text] ~= nil then
+		return exact[text]
+	end
+	local a, b = string.match(text, "^(.-) is counter%-attacking you!$")
+	if a then
+		return I18n.owner_name(a) .. " контратакует вас!"
+	end
+	a = string.match(text, "^(.-) is attacking you!$")
+	if a then
+		return I18n.owner_name(a) .. " атакует вас!"
+	end
+	a = string.match(text, "^You eliminated (.+)$")
+	if a then
+		return "Вы уничтожили " .. I18n.owner_name(a)
+	end
+	a, b = string.match(text, "^(.+) was eliminated by (.+)$")
+	if a and b then
+		return string.format("%s уничтожена (%s)", I18n.owner_name(a), I18n.owner_name(b))
+	end
+	a = string.match(text, "^(.+) was eliminated$")
+	if a then
+		return I18n.owner_name(a) .. " уничтожена"
+	end
+	a, b = string.match(text, "^(.+) captured your (.+)$")
+	if a and b then
+		return string.format("%s захватил(а) ваш объект: %s", I18n.owner_name(a), b)
+	end
+	a, b = string.match(text, "^(.+) destroyed your (.+)$")
+	if a and b then
+		return string.format("%s уничтожил(а) ваш объект: %s", I18n.owner_name(a), b)
+	end
+	a = string.match(text, "^You took over (.+)$")
+	if a then
+		return "Вы возглавили державу " .. I18n.owner_name(a)
+	end
+	a = string.match(text, "^Unlock (.+) in the Arsenal first$")
+	if a then
+		return "Сначала откройте в Арсенале: " .. a
+	end
+	a = string.match(text, "^Not enough gold for (.+)$")
+	if a then
+		return "Недостаточно золота: " .. a
+	end
+	a = string.match(text, "^No room for (.+) there$")
+	if a then
+		return "Здесь нет места для постройки"
+	end
+	a = string.match(text, "^(.+) has conquered your nation$") or string.match(text, "^(.+) conquered your nation$")
+	if a then
+		return I18n.owner_name(a) .. " захватил(а) вашу державу"
+	end
+	a = string.match(text, "^You are now allied with (.+)$")
+	if a then
+		return "Заключён союз с " .. I18n.owner_name(a)
+	end
+	a = string.match(text, "^(.+) declined your alliance$")
+	if a then
+		return I18n.owner_name(a) .. " отклонил(а) союз"
+	end
+	a = string.match(text, "^(.+) did not answer your alliance request$")
+	if a then
+		return I18n.owner_name(a) .. " не ответил(а) на запрос союза"
+	end
+	a = string.match(text, "^(.+) betrayed your alliance!$")
+	if a then
+		return I18n.owner_name(a) .. " предал(а) ваш союз!"
+	end
+	a, b = string.match(text, "^(.+) betrayed (.+)$")
+	if a and b then
+		return string.format("%s предал(а) %s", I18n.owner_name(a), I18n.owner_name(b))
+	end
+	a = string.match(text, "^Your alliance with (.+) has expired$")
+	if a then
+		return string.format("Союз с %s истёк", I18n.owner_name(a))
+	end
+	a = string.match(text, "^Your alliance with (.+) was renewed$")
+	if a then
+		return string.format("Союз с %s продлён", I18n.owner_name(a))
+	end
+	a = string.match(text, "^(.+) wants to renew your alliance$")
+	if a then
+		return I18n.owner_name(a) .. " предлагает продлить союз"
+	end
+	a, b = string.match(text, "^(.+) sent you (.+) troops$")
+	if a and b then
+		return string.format("%s отправил(а) вам %s войск", I18n.owner_name(a), b)
+	end
+	a, b = string.match(text, "^(.+) surrendered to (.+)$")
+	if a and b then
+		return string.format("%s сдалась %s", I18n.owner_name(a), I18n.owner_name(b))
+	end
+	a = string.match(text, "^You can't attack your ally (.+)$")
+	if a then
+		return "Нельзя атаковать союзника: " .. I18n.owner_name(a)
+	end
+	a = string.match(text, "^You don't border (.+) — send a boat$")
+	if a then
+		return "Нет сухопутной границы с " .. I18n.owner_name(a) .. " — отправьте десант"
+	end
+	a = string.match(text, "^Your transport landed in (.+)$")
+	if a then
+		return "Десант высадился в " .. I18n.owner_name(a)
+	end
+	a = string.match(text, "^(.+) landed troops on your coast!$")
+	if a then
+		return I18n.owner_name(a) .. " высадил(а) десант на ваш берег!"
+	end
+	a, b = string.match(text, "^(.+) launched (.+) at you!$")
+	if a and b then
+		return string.format("%s нанёс удар (%s) по вам!", I18n.owner_name(a), b)
+	end
+	a, b = string.match(text, "^(.+) sank your transport$")
+	if a then
+		return I18n.owner_name(a) .. " потопил(а) ваш транспорт"
+	end
+	a = string.match(text, "^(.+) sank your warship$")
+	if a then
+		return I18n.owner_name(a) .. " потопил(а) ваш корабль"
+	end
+	a = string.match(text, "^You sank a warship from (.+)$")
+	if a then
+		return "Вы потопили корабль (" .. I18n.owner_name(a) .. ")"
+	end
+	a = string.match(text, "^(.+) has conquered the world$")
+	if a then
+		return I18n.owner_name(a) .. " покорил(а) весь мир"
+	end
+	a = string.match(text, "^Time is up — (.+) holds the most land and wins$")
+	if a then
+		return "Время вышло — побеждает " .. I18n.owner_name(a)
+	end
+	return text
+end
+
 function UIAdvisor.on_message(self: any, _to: number, category: number, text: string)
 	local ctx = self.ctx
 	if not ctx:in_match() or UIAdvisor.duplicate_message(text) then
@@ -717,7 +857,7 @@ function UIAdvisor.on_message(self: any, _to: number, category: number, text: st
 	if naval == "trade_captured" and self:_throttled("toast_capture", 6000) then
 		return
 	end
-	self.ui.feed:toast(category, text, if naval ~= "" then "warship" else "")
+	self.ui.feed:toast(category, translate_sim_msg(text), if naval ~= "" then "warship" else "")
 	-- (naval news is silent — sinkings and trade captures played every few seconds
 	-- once warships were out and grew annoying, 2026-09-27)
 	if naval == "" and category == Defs.MSG_ALERT then
@@ -746,13 +886,13 @@ function UIAdvisor.on_unit_changed(self: any, uid: number)
 	local prev = self._ship_state[uid] or 0
 	self._ship_state[uid] = stt
 	if stt == 1 and prev ~= 1 and not self:_throttled("retreat", 8000) then
-		ui.feed:toast(Defs.MSG_INFO, "Your warship is returning to port for repairs", "warship")
+		ui.feed:toast(Defs.MSG_INFO, I18n.t("adv_ship_repair"), "warship")
 	end
 	local vet = tonumber(u.veterancy) or 0
 	local pv = self._ship_vet[uid] or 0
 	self._ship_vet[uid] = vet
 	if vet > pv and not self:_throttled("vet", 3000) then
-		ui.feed:toast(Defs.MSG_GOOD, string.format("Your warship reached veterancy %d", vet), "warship")
+		ui.feed:toast(Defs.MSG_GOOD, I18n.t("adv_ship_vet", vet), "warship")
 	end
 	if ui.unit_card.is_open and ui.unit_card.uid == uid then
 		ui.unit_card:refresh()
@@ -902,8 +1042,11 @@ function UIAdvisor.war_begins(self: any)
 	local top_y = if above >= below then cap_y - gap - h else cap_y + gap
 	top_y = math.max(top_y, band.Min.Y - 12.0)
 	local Banner = UICtx.mod("Banner")
+	local sub_key = if ctx.state ~= nil and ctx.state.game_mode == "zombie"
+		then "adv_war_sub_zombie"
+		else "adv_war_sub"
 	local banner =
-		Banner.make(ctx, "THE WAR BEGINS", "Expand, build and outlast 88 nations", T().AMBER, 1.6, top_y, h, small)
+		Banner.make(ctx, I18n.t("adv_war_title"), I18n.t(sub_key), T().AMBER, 1.6, top_y, h, small)
 	-- The camera is still pushing in, so where the player's own label ends up is only known as it
 	-- goes: the band slides clear of it (up to just under the top panels, or below the capital), and
 	-- every other map label steps around its text (review R2-5: on a 361 px phone the subtitle sat

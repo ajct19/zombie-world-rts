@@ -55,9 +55,10 @@ function TopStatus.new(c: any)
 	self._full = row
 	self.panel:add_child(row)
 
+	local I18n = UICtx.data("I18n")
 	local tb = T.vbox(0)
 	tb.size_flags_vertical = W.SHRINK_CENTER
-	self._phase = T.caption("Match time")
+	self._phase = T.caption(I18n.t("top_phase_time"))
 	tb:add_child(self._phase)
 	local tv = T.hbox(4)
 	self._clock = T.label("0:00", 20, 700)
@@ -87,9 +88,10 @@ function TopStatus.new(c: any)
 	local head = T.hbox(6)
 	self._head = head
 	head:add_child(T.icon_rect("globe", 12.0, T.TEXT_3))
-	head:add_child(T.caption("World control"))
+	self._ctrl_cap = T.caption(I18n.t("top_world_ctrl"))
+	head:add_child(self._ctrl_cap)
 	head:add_child(spacer())
-	self._goal = T.caption("Goal 80%", 11, T.GOLD)
+	self._goal = T.caption(I18n.t("top_goal", 80), 11, T.GOLD)
 	head:add_child(self._goal)
 	sb:add_child(head)
 	self._bar = FillBar.new(7.0, T.AMBER)
@@ -99,7 +101,7 @@ function TopStatus.new(c: any)
 	local who = T.hbox(6)
 	self._you_sw = T.swatch(T.AMBER, 9.0, 2)
 	who:add_child(self._you_sw)
-	self._you = T.label("You 0.0%", 12, 600, T.TEXT)
+	self._you = T.label(I18n.t("top_you") .. " 0.0%", 12, 600, T.TEXT)
 	who:add_child(self._you)
 	who:add_child(spacer())
 	self._lead_box = T.hbox(6)
@@ -248,6 +250,7 @@ function TopStatus._fix_widths(self)
 	local ws = math.max(12, T.min_font_size)
 	local w_block = math.max(
 		T.text_width("SPAWN PHASE", small, 700) + 12.0,
+		T.text_width("ФАЗА ВЫСАДКИ", small, 700) + 12.0,
 		T.text_width("PROTECTED 8:88", small, 700) + 20.0,
 		T.text_width("ВСПЫШКА 8:88", small, 700) + 22.0,
 		T.text_width("ВАКЦИНА 88с", small, 700) + 22.0
@@ -260,7 +263,7 @@ function TopStatus._fix_widths(self)
 	self._phase.parent:set_min_size(Vector2.new(w_block, 0))
 	self._grace_row:set_min_size(Vector2.new(w_block, self._phase:get_combined_minimum_size().Y))
 	local bar_w = self._bar.custom_minimum_size.X
-	local w_you = T.text_width("You lead · 88.88%", ws, 600) + 2.0
+	local w_you = math.max(T.text_width("You lead · 88.88%", ws, 600), T.text_width("Вы лидер · 88.88%", ws, 600)) + 2.0
 	T.fix_width(self._you, w_you, W.ALIGN_LEFT, false)
 	local lead_w = math.max(40.0, bar_w - w_you - 12.0 - 9.0 - 12.0 - 18.0)
 	T.fix_width(self._lead, lead_w, W.ALIGN_LEFT, false)
@@ -328,7 +331,7 @@ function TopStatus.refresh(self)
 	local now = ctx:render_tick()
 	local tr = Defs.TICK_RATE
 	if s.phase == Defs.PHASE_SPAWN then
-		self._phase:set_text("SPAWN PHASE")
+		self._phase:set_text(I18n.t("top_phase_spawn"))
 		if self._phase_end_tick > 0 then
 			self._clock:set_text(T.fmt_time(math.ceil((self._phase_end_tick - now) / tr)))
 		else
@@ -340,7 +343,7 @@ function TopStatus.refresh(self)
 		if s.time_limit_ticks > 0 then
 			-- time_limit_ticks is the absolute tick at which the match ends.
 			local left = math.max(0, (s.time_limit_ticks - now) / tr)
-			self._phase:set_text("TIME LEFT")
+			self._phase:set_text(I18n.t("top_phase_left"))
 			self._clock:set_text(T.fmt_time(math.ceil(left)))
 			T.set_font_color(self._clock, if left < 120 then T.RED else T.TEXT)
 			local total = if ctx.play_start_tick >= 0
@@ -348,12 +351,12 @@ function TopStatus.refresh(self)
 				else ctx:match_limit_s()
 			self._limit:set_text("/ " .. T.fmt_time(math.floor(total + 0.5)))
 		else
-			self._phase:set_text("MATCH TIME")
+			self._phase:set_text(I18n.t("top_phase_time"))
 			self._clock:set_text(T.fmt_time(elapsed))
 			self._limit:set_text("")
 		end
 	else
-		self._phase:set_text("MATCH OVER")
+		self._phase:set_text(I18n.t("top_phase_over"))
 		self._limit:set_text("")
 		if self._over_secs == nil then
 			self._over_secs = ctx:match_seconds()
@@ -395,7 +398,7 @@ function TopStatus.refresh(self)
 	local you_lbl = I18n.t("top_you")
 	self._you_sw:set_visible(me ~= 0)
 	T.set_swatch_color(self._you_sw, mcol)
-	self._you:set_text(if me ~= 0 then (you_lbl .. " " .. T.fmt_pct(my_share)) else "Spectating")
+	self._you:set_text(if me ~= 0 then (you_lbl .. " " .. T.fmt_pct(my_share)) else I18n.t("top_spectating"))
 	if ctx.compact and me ~= 0 and self.rank_provider ~= nil then
 		local rk = tonumber(self.rank_provider()) or 0
 		if rk > 0 then
@@ -416,13 +419,14 @@ function TopStatus.refresh(self)
 			self._lead:set_text(T.fmt_pct(ls))
 		else
 			local l_inf = is_zombie and type(s.is_infected) == "function" and s:is_infected(leader.id)
-			local lname = if l_inf then string.format("[%s] %s", I18n.t("top_horde_tag"), leader.name) else leader.name
+			local disp_leader = I18n.owner_name(leader.name)
+			local lname = if l_inf then string.format("[%s] %s", I18n.t("top_horde_tag"), disp_leader) else disp_leader
 			self._lead:set_text(string.format("%s %s", lname, T.fmt_pct(ls)))
 		end
 		if leader.id ~= me then
 			table.insert(self._bar.markers, { v = ctx:win_share(leader.id), color = T.owner_ui_color(leader.color) })
 		else
-			self._you:set_text((if ctx.compact then "#1 · " else "You lead · ") .. T.fmt_pct(my_share))
+			self._you:set_text((if ctx.compact then "#1 · " else I18n.t("top_you_lead")) .. T.fmt_pct(my_share))
 		end
 	else
 		self._lead_box:set_visible(false)
@@ -441,9 +445,13 @@ function TopStatus.refresh(self)
 		T.set_font_color(self._m_clock, self._clock.color)
 		T.set_swatch_color(self._m_sw, mcol)
 		self._m_sw:set_visible(me ~= 0)
-		local yt = string.gsub(self._you.text, "You lead · ", "#1 · ")
-		yt = string.gsub(yt, you_lbl .. " ", "")
-		yt = string.gsub(yt, "You ", "")
+		local yt = self._you.text
+		local lead_p = I18n.t("top_you_lead")
+		if string.sub(yt, 1, #lead_p) == lead_p then
+			yt = "#1 · " .. string.sub(yt, #lead_p + 1)
+		elseif string.sub(yt, 1, #you_lbl + 1) == you_lbl .. " " then
+			yt = string.sub(yt, #you_lbl + 2)
+		end
 		self._m_you:set_text(yt)
 		-- While protected, the shield countdown takes the clock's place (the match is young).
 		local gl = self:grace_left()
@@ -476,9 +484,10 @@ function TopStatus._refresh_teams(self, me: number)
 		end
 	end
 	local Defs = T.core("Defs")
+	local I18n = UICtx.data("I18n")
 	if mine ~= 0 and s.phase == Defs.PHASE_SPAWN then
 		-- before the land counts: which team you're on ("Your team:" in the spawn phase)
-		self._you:set_text(if ctx.compact then ctx:team_label(mine) else "Your team: " .. ctx:team_label(mine))
+		self._you:set_text(if ctx.compact then ctx:team_label(mine) else I18n.t("top_your_team", ctx:team_label(mine)))
 		self._lead_box:set_visible(false)
 		return
 	end
@@ -486,7 +495,7 @@ function TopStatus._refresh_teams(self, me: number)
 		self._you:set_text(
 			if ctx.compact
 				then string.format("#%d · %s", rank, T.fmt_pct(share))
-				elseif rank == 1 then "Your team leads · " .. T.fmt_pct(share)
+				elseif rank == 1 then I18n.t("top_team_leads", T.fmt_pct(share))
 				else string.format("%s %s", ctx:team_label(mine), T.fmt_pct(share))
 		)
 	end
@@ -592,6 +601,14 @@ function TopStatus.grace_left(self): number
 end
 
 --- Per frame (GDScript _process).
+function TopStatus.refresh_locale(self)
+	local I18n = UICtx.data("I18n")
+	if self._ctrl_cap ~= nil then
+		self._ctrl_cap:set_text(I18n.t("top_world_ctrl"))
+	end
+	self:refresh()
+end
+
 function TopStatus.update(self, delta: number)
 	self._accum += delta
 	if self._accum >= 0.25 then

@@ -22,6 +22,7 @@ local Rules = require(Core:WaitForChild("Rules")) :: any
 local NumberFormat = require(Core:WaitForChild("NumberFormat")) :: any
 local Sprites = require(RS:WaitForChild("Airfront"):WaitForChild("Assets"):WaitForChild("MapSprites")) :: any
 local Cosmetics = require(RS:WaitForChild("Airfront"):WaitForChild("Data"):WaitForChild("Cosmetics")) :: any
+local I18n = require(RS:WaitForChild("Airfront"):WaitForChild("Data"):WaitForChild("I18n")) :: any
 local Coop = require(RS:WaitForChild("Airfront"):WaitForChild("Net"):WaitForChild("Coop")) :: any
 local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
 
@@ -608,16 +609,20 @@ function NameLayer.tick(self: any, dt: number)
 			p.shown = true
 		end
 		-- text + style
-		local text = o.name or ""
-		if p.text ~= text then
+		local inf = type(st.is_infected) == "function" and st:is_infected(id)
+		local raw = o.name or ""
+		local disp = if inf then I18n.owner_name(raw) else raw
+		local text = if inf then "☣ " .. disp else disp
+		if p.text ~= text or p.inf ~= inf then
 			p.text = text
+			p.inf = inf
 			p.name.Text = text
 			p.size_dirty = 3
 			local shade = shade_of(o.kind)
-			local c = Color3.new(shade, shade, shade)
+			local c = if inf then Color3.fromRGB(165, 255, 110) else Color3.new(shade, shade, shade)
 			p.name.TextColor3 = c
 			p.troops.TextColor3 = c
-			local col = st:owner_color(id)
+			local col = if inf then Color3.fromRGB(28, 10, 42) else st:owner_color(id)
 			p.name_stroke.Color = col
 			p.troop_stroke.Color = col
 		end

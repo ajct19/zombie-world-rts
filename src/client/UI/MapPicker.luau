@@ -11,18 +11,19 @@ local W = require("./Widgets")
 local GlassPanel = require("./GlassPanel")
 local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
+local I18n = require("./UICtx").data("I18n")
 
 local MapPicker = W.class(W.Control)
 
---- Tabs: { label, predicate on the categories set }.
+--- Tabs: { i18n key, predicate on the categories set }.
 MapPicker.TABS = {
-	{ "Featured", { featured = true } },
-	{ "World", { world = true, continental = true } },
-	{ "Europe", { europe = true } },
-	{ "Asia", { asia = true } },
-	{ "Americas", { north_america = true, south_america = true } },
-	{ "Africa · Oceania", { africa = true, oceania = true, antarctica = true } },
-	{ "All", nil },
+	{ "map_tab_featured", { featured = true } },
+	{ "map_tab_world", { world = true, continental = true } },
+	{ "map_tab_europe", { europe = true } },
+	{ "map_tab_asia", { asia = true } },
+	{ "map_tab_americas", { north_america = true, south_america = true } },
+	{ "map_tab_africa", { africa = true, oceania = true, antarctica = true } },
+	{ "map_tab_all", nil },
 }
 MapPicker.CARD = Vector2.new(168, 132)
 MapPicker.GRID_SIZE = Vector2.new(740, 420)
@@ -57,9 +58,10 @@ function MapPicker.new(c: any)
 	self._panel:add_child(v)
 	-- head: title + close
 	local head = UITheme.hbox(10)
-	local title = UITheme.label("CHOOSE A MAP", 20, 800, UITheme.TEXT, 3)
+	local title = UITheme.label(I18n.t("map_choose"), 20, 800, UITheme.TEXT, 3)
 	title.size_flags_horizontal = W.EXPAND_FILL
 	title.size_flags_vertical = W.SHRINK_CENTER
+	self._title = title
 	head:add_child(title)
 	local close = W.Button.new("", "GhostButton")
 	close:set_icon("close")
@@ -78,7 +80,7 @@ function MapPicker.new(c: any)
 	local tabs = UITheme.hbox(6)
 	self._tabs = {}
 	for i, t in ipairs(MapPicker.TABS) do
-		local chip = UITheme.button(t[1], "ChipButton", "", 32.0)
+		local chip = UITheme.button(I18n.t(t[1]), "ChipButton", "", 32.0)
 		chip.toggle_mode = true
 		chip:set_font_size(12)
 		chip:set_pressed_no_signal(i == self._tab)
@@ -123,7 +125,7 @@ function MapPicker.new(c: any)
 	pad.PaddingLeft = UDim.new(0, 2)
 	pad.Parent = sf
 	-- footer
-	self._foot = UITheme.label(MapPicker.ATTRIBUTION, 11, 500, UITheme.TEXT_3)
+	self._foot = UITheme.label(I18n.t("map_attr"), 11, 500, UITheme.TEXT_3)
 	v:add_child(self._foot)
 	self._cards = {} :: { [string]: TextButton }
 	return self
@@ -183,7 +185,7 @@ function MapPicker._card(self, e: any, order: number): TextButton
 	name.TextSize = math.floor(14 * s)
 	name.TextColor3 = Color3.new(1, 1, 1)
 	name.TextTruncate = Enum.TextTruncate.AtEnd
-	name.Text = e.name or e.id
+	name.Text = I18n.map_name(e.id, e.name or e.id)
 	name.Position = UDim2.new(0, math.floor(8 * s), 1, -math.floor(36 * s))
 	name.Size = UDim2.new(1, -math.floor(16 * s), 0, math.floor(18 * s))
 	name.TextXAlignment = Enum.TextXAlignment.Left
@@ -335,6 +337,24 @@ function MapPicker._center(self)
 	local rp = Vector2.new(math.floor(p.X + 0.5), math.floor(y + 0.5))
 	self._panel:set_offsets(rp.X, rp.Y, rp.X, rp.Y)
 	self._panel:reset_size()
+end
+
+function MapPicker.refresh_locale(self)
+	if self._title ~= nil then
+		self._title:set_text(I18n.t("map_choose"))
+	end
+	if self._foot ~= nil then
+		self._foot:set_text(I18n.t("map_attr"))
+	end
+	for i, t in ipairs(MapPicker.TABS) do
+		local ch = self._tabs[i]
+		if ch ~= nil then
+			ch:set_text(I18n.t(t[1]))
+		end
+	end
+	if self.is_open then
+		self:_rebuild()
+	end
 end
 
 return MapPicker

@@ -10,6 +10,7 @@
 local UICtx = require("./UICtx") :: any
 local UIRules = require("./UIRules") :: any
 local Defs = UICtx.core("Defs")
+local I18n = UICtx.data("I18n")
 
 local _T: any = nil
 local function T(): any
@@ -404,7 +405,7 @@ function UIInteract._fire_selected(self: any, pos: Vector2)
 	if tostring(act.type) == "none" or not act.ok then
 		ctx:sfx("deny", -4.0)
 		local r = tostring(act.reason)
-		self:_float(if r ~= "" then r else "Target out of reach", "info", T().TEXT_2, pos)
+		self:_float(if r ~= "" then r else I18n.t("ui_out_reach"), "info", T().TEXT_2, pos)
 		if act.floor == true then
 			ctx.floor_held:Fire()
 		end
@@ -478,17 +479,13 @@ function UIInteract.betray_from_card(self: any, attack: boolean)
 			ratio = ctx:order_ratio(),
 		})
 		self:_float(
-			string.format(
-				"You betrayed %s · attacking with %s",
-				ctx.state:owner_name(own),
-				T().fmt_troops(ctx:troops_for_ratio())
-			),
+			I18n.t("ui_betray_atk", ctx:owner_name(own), T().fmt_troops(ctx:troops_for_ratio())),
 			"betray",
 			T().RED,
 			at
 		)
 	else
-		self:_float("You broke your alliance with " .. ctx.state:owner_name(own), "betray", T().RED, at)
+		self:_float(I18n.t("ui_broke_ally", ctx:owner_name(own)), "betray", T().RED, at)
 	end
 end
 
@@ -511,11 +508,11 @@ end
 function UIInteract.donate_to(self: any, own: number, pos: Vector2): boolean
 	local ctx = self.ctx
 	local plan = ctx.rules:donate_plan(own)
-	local name = ctx.state:owner_name(own)
+	local name = ctx:owner_name(own)
 	if plan.want < 1 or plan.full or plan.amount < 1 then
 		ctx:sfx("deny", -4.0)
 		self:_float(
-			if plan.want < 1 then "No troops to spare" else name .. " is at its troop cap",
+			if plan.want < 1 then I18n.t("rad_no_spare") else I18n.t("ui_donate_cap", name),
 			"info",
 			T().RED,
 			pos
@@ -525,8 +522,8 @@ function UIInteract.donate_to(self: any, own: number, pos: Vector2): boolean
 	ctx:send({ type = "donate", target = own, troops = plan.amount })
 	self:_float(
 		if plan.capped
-			then string.format("Sent %s troops  ·  %s is now at its troop cap", T().fmt_troops(plan.amount), name)
-			else string.format("Sent %s troops to %s", T().fmt_troops(plan.amount), name),
+			then I18n.t("ui_sent_cap", T().fmt_troops(plan.amount), name)
+			else I18n.t("ui_sent_to", T().fmt_troops(plan.amount), name),
 		"donate",
 		T().GREEN,
 		pos
@@ -544,7 +541,7 @@ function UIInteract.ally_from_card(self: any)
 	tc:hide_card()
 	ctx:world_call("set_selected_owner", { 0 })
 	ctx:send({ type = "ally_request", target = own })
-	self:_float("Alliance proposed to " .. ctx.state:owner_name(own), "alliance", T().VIOLET, ctx:mouse_pos())
+	self:_float(I18n.t("ui_ally_prop", ctx:owner_name(own)), "alliance", T().VIOLET, ctx:mouse_pos())
 end
 
 function UIInteract.on_context(self: any, tile: number, screen_pos: Vector2)
@@ -577,10 +574,10 @@ function UIInteract.on_context(self: any, tile: number, screen_pos: Vector2)
 	local title = ctx:terrain_title(tile)
 	local col = T().TEXT_2
 	if own ~= 0 then
-		title = s:owner_name(own)
+		title = ctx:owner_name(own)
 		col = T().owner_ui_color(UICtx.color3(s:owner_color(own)))
 	elseif s.map:is_contestable(tile) then
-		title = "Unclaimed " .. string.lower(ctx:terrain_title(tile))
+		title = I18n.t("ui_unclaimed_ter", ctx:terrain_title(tile))
 	end
 	self.radial:open_at(tile, screen_pos, ctx.rules:radial_items(tile), title, col)
 end
@@ -642,35 +639,24 @@ function UIInteract._place(self: any, tile: number, pos: Vector2)
 			self._confirm_tile = tile
 			self._confirm_msec = now
 			ctx:sfx("click")
-			local what = UIRules.TITLES[kind]
+			local what = ctx.rules:title_of(kind)
 			self:on_hover(tile)
 			local n_sam = tonumber(ctx:world_call("aim_sams")) or 0
-			local verb = if ctx.touch then "Tap" else "Click"
+			local verb = I18n.t(if ctx.touch then "verb_tap" else "verb_click")
 			if n_sam > 0 and kind ~= "mirv" then
 				self:_float(
-					string.format(
-						"Target inside %d enemy SAM%s: the %s may be shot down. %s again to launch",
-						n_sam,
-						if n_sam == 1 then "" else "s",
-						what,
-						verb
-					),
+					I18n.t(if n_sam == 1 then "ui_sam_warn_one" else "ui_sam_warn_many", n_sam, what, verb),
 					"sam",
 					T().RED,
 					pos
 				)
 			else
-				self:_float(
-					string.format("Target locked. %s again to launch the %s", verb, what),
-					"target",
-					T().RED,
-					pos
-				)
+				self:_float(I18n.t("ui_target_lock", verb, what), "target", T().RED, pos)
 			end
 			return
 		end
 		ctx:send({ type = "nuke", kind = kind, tile = self._confirm_tile })
-		self:_float(UIRules.TITLES[kind] .. " launched", kind, T().RED, pos)
+		self:_float(I18n.t("ui_launched_fmt", ctx.rules:title_of(kind)), kind, T().RED, pos)
 		self:cancel_aim(false)
 		return
 	end
@@ -737,24 +723,24 @@ end
 
 function UIInteract._ghost_caption(self: any, kind: string, pl: { [string]: any }): string
 	local ctx = self.ctx
-	local title = UIRules.TITLES[kind]
+	local title = ctx.rules:title_of(kind)
 	if not pl.ok then
 		local r = pl.reason
-		return if r ~= nil and r ~= "" then tostring(r) else "Can't place here"
+		return if r ~= nil and r ~= "" then tostring(r) else I18n.t("place_invalid")
 	end
 	local cost = T().fmt_cost(ctx.rules:availability(kind).cost)
 	if pl.upgrade then
-		return string.format("Upgrade %s → Lv %d · %s", UIRules.SHORT[kind], tonumber(pl.level) or 2, cost)
+		return I18n.t("ui_upgrade_fmt", ctx.rules:short_of(kind), tonumber(pl.level) or 2, cost)
 	end
 	if kind == "warship" then
-		return "Warship patrols here · " .. cost
+		return I18n.t("ui_patrol_here", cost)
 	end
 	if UIRules.is_nuke(kind) then
 		local n_sam = tonumber(ctx:world_call("aim_sams")) or 0
 		if n_sam > 0 and kind ~= "mirv" then
-			return string.format("%d SAM%s cover this target", n_sam, if n_sam == 1 then "" else "s")
+			return I18n.t(if n_sam == 1 then "ui_sam_cover_one" else "ui_sam_cover_many", n_sam)
 		end
-		return string.format("Launch %s · %s", UIRules.SHORT[kind], cost)
+		return I18n.t("ui_launch_fmt", ctx.rules:short_of(kind), cost)
 	end
 	return string.format("%s · %s", title, cost)
 end
@@ -878,7 +864,7 @@ function UIInteract._move_selected(self: any, tile: number, pos: Vector2)
 	ctx:send({ type = "move_warship", uid = uid, tile = tile })
 	self.unit_card:mark_destination(tile)
 	ctx:sfx("click", -4.0)
-	self:_float("Warship moving", "warship", T().CYAN, pos)
+	self:_float(I18n.t("ui_ship_move"), "warship", T().CYAN, pos)
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -1076,10 +1062,10 @@ function UIInteract.on_radial(self: any, id: string, tile: number)
 	elseif id == "ally_request" then
 		ctx:send({ type = "ally_request", target = own })
 		ctx:sfx("click")
-		self:_float("Alliance proposed to " .. s:owner_name(own), "alliance", T().VIOLET, pos)
+		self:_float(I18n.t("ui_ally_prop", ctx:owner_name(own)), "alliance", T().VIOLET, pos)
 	elseif id == "ally_accept" then
 		ctx:send({ type = "ally_reply", target = own, accept = true })
-		self:_float("Alliance accepted", "alliance", T().VIOLET, pos)
+		self:_float(I18n.t("ui_ally_acc"), "alliance", T().VIOLET, pos)
 	elseif id == "ally_extend" then
 		ctx:send({ type = "ally_extend", target = own })
 	elseif id == "ally_break" then
@@ -1156,8 +1142,8 @@ function UIInteract.retreat(self: any, aid: number)
 	local a = s.attacks[aid]
 	ctx:send({ type = "retreat", attack_id = aid })
 	ctx:sfx("click")
-	local who = if a.target ~= 0 then s:owner_name(a.target) else "neutral land"
-	self:_float("Retreating from " .. who, "retreat", T().CYAN, ctx:mouse_pos())
+	local who = if a.target ~= 0 then ctx:owner_name(a.target) else I18n.t("ui_neutral_land")
+	self:_float(I18n.t("ui_retreat_from", who), "retreat", T().CYAN, ctx:mouse_pos())
 end
 
 --- Backspace: pull back the most recent outgoing attack.
@@ -1243,62 +1229,67 @@ function UIInteract.hover_spec(self: any, tile: number, pinned: boolean?): { [st
 			return {}
 		end
 		local rel = ctx:relation(own)
-		spec.title = o.name
+		spec.title = I18n.owner_name(o.name)
 		spec.swatch = UICtx.color3(o.color)
 		spec.badge = rel
 		spec.badge_color = ctx:relation_color(rel)
 		spec.sub = string.format("%s  ·  %s", ctx:kind_title(o.kind), terrain)
 		local rows = {
-			{ "Troops", Th.fmt_troops(o.troops), Th.TEXT },
-			{ "Land", Th.fmt_pct(s:land_share(own)), Th.TEXT },
+			{ I18n.t("ui_troops"), Th.fmt_troops(o.troops), Th.TEXT },
+			{ I18n.t("ui_land"), Th.fmt_pct(s:land_share(own)), Th.TEXT },
 		}
 		if own == ctx:me() or pinned then
-			table.insert(rows, { "Gold", Th.fmt_num(o.gold), Th.GOLD })
+			table.insert(rows, { I18n.t("ui_gold"), Th.fmt_num(o.gold), Th.GOLD })
 		end
 		local st = ctx:structure_at(tile, 1)
 		if st ~= nil and st.owner == own then
-			local lv = if st.level > 1 then string.format(" · Lv %d", st.level) else ""
-			table.insert(rows, { "Structure", Defs.STRUCT_TITLES[st.kind] .. lv, Th.TEXT })
+			local lv = if st.level > 1 then I18n.t("ui_lv_suffix_fmt", st.level) else ""
+			local zsurv = s.game_mode == "zombie" and not s:is_infected(own)
+			table.insert(rows, { I18n.t("ui_structure"), I18n.struct_title(st.kind, zsurv) .. lv, Th.TEXT })
 			if st.active_tick > s.tick then
 				-- Under construction: it does nothing yet (no cap, trade, defense, interception, launch).
 				table.insert(
 					rows,
-					{ "Building…", Th.fmt_time(math.ceil((st.active_tick - s.tick) / Defs.TICK_RATE)), Th.ORANGE }
+					{ I18n.t("ui_building"), Th.fmt_time(math.ceil((st.active_tick - s.tick) / Defs.TICK_RATE)), Th.ORANGE }
 				)
 			end
 		end
 		if s:is_traitor(own) then
 			table.insert(
 				rows,
-				{ "Traitor", string.format("%ds left", math.ceil((o.traitor_until - s.tick) / Defs.TICK_RATE)), Th.RED }
+				{ I18n.t("ui_traitor"), I18n.t("ui_left_s", math.ceil((o.traitor_until - s.tick) / Defs.TICK_RATE)), Th.RED }
 			)
 		end
 		-- game admins only: whether this "player" is a real person
 		local bots = if ctx.session ~= nil then ctx.session.admin_bots else nil
 		if bots ~= nil and o.kind == Defs.KIND_HUMAN and own ~= ctx:me() then
-			table.insert(rows, if bots[own] then { "Player", "Bot", Th.TEXT_3 } else { "Player", "Human", Th.CYAN })
+			table.insert(rows, {
+				I18n.t("ui_player"),
+				I18n.t(if bots[own] then "ui_bot" else "ui_human"),
+				if bots[own] then Th.TEXT_3 else Th.CYAN,
+			})
 		end
 		-- the player panel's "Alliance Expires In": red in the last 30 s, yellow in the last 60 s
 		local ai = if own ~= ctx:me() then s:alliance_info(ctx:me(), own) else nil
 		if ai ~= nil and ai.expires_at >= 0 then
 			local secs = math.ceil(ai.ticks_left / Defs.TICK_RATE)
 			local col = if secs <= 30 then Th.RED elseif secs <= 60 then Th.AMBER else Th.GREEN
-			table.insert(rows, { "Alliance ends", Th.fmt_time(secs), col })
+			table.insert(rows, { I18n.t("ui_ally_ends"), Th.fmt_time(secs), col })
 			if ai.me_asked or ai.other_asked then
 				table.insert(
 					rows,
-					{ "Renewal", if ai.me_asked then "asked, waiting for them" else "they asked", Th.VIOLET }
+					{ I18n.t("ui_renewal"), I18n.t(if ai.me_asked then "ui_asked_wait" else "ui_they_asked"), Th.VIOLET }
 				)
 			end
 		end
 		spec.rows = rows
 	elseif map:is_land(tile) then
 		local fallout = s:has_fallout(tile)
-		spec.title = if not fallout then ("Unclaimed  ·  " .. terrain) else "Fallout zone"
+		spec.title = if not fallout then I18n.t("ui_unclaimed_ter", terrain) else I18n.t("ui_fallout_zone")
 		spec.title_color = if not fallout then Th.TEXT_2 else Th.ORANGE
 		local st2 = ctx:structure_at(tile, 0)
 		if st2 ~= nil then
-			spec.sub = Defs.STRUCT_TITLES[st2.kind]
+			spec.sub = I18n.struct_title(st2.kind, s.game_mode == "zombie")
 		end
 	else
 		if not pinned then
@@ -1311,31 +1302,28 @@ function UIInteract.hover_spec(self: any, tile: number, pinned: boolean?): { [st
 		return spec
 	end
 	local act = ctx.rules:primary(tile)
-	local verb = if ctx.touch then "Tap" else "Click"
+	local verb = I18n.t(if ctx.touch then "verb_tap" else "verb_click")
 	local ty = tostring(act.type)
 	if ty == "spawn" then
-		spec.hint = verb .. " to place your capital here"
+		spec.hint = I18n.t("ui_hint_spawn", verb)
 		spec.hint_color = Th.AMBER
 		spec.hint_icon = "target"
 		local crowd = self:_crowding(tile)
 		local rows2 = spec.rows or {}
 		if crowd >= 6 then
-			table.insert(rows2, { "Neighbours", string.format("%d nearby · crowded, tough start", crowd), Th.ORANGE })
+			table.insert(rows2, { I18n.t("ui_neighbors"), I18n.t("ui_crowd_tough", crowd), Th.ORANGE })
 		elseif crowd >= 3 then
-			table.insert(rows2, { "Neighbours", string.format("%d nearby · contested", crowd), Th.AMBER })
+			table.insert(rows2, { I18n.t("ui_neighbors"), I18n.t("ui_crowd_cont", crowd), Th.AMBER })
 		else
-			table.insert(
-				rows2,
-				{ "Neighbours", string.format("%d nearby · ", crowd) .. "open land, safer start", Th.GREEN }
-			)
+			table.insert(rows2, { I18n.t("ui_neighbors"), I18n.t("ui_crowd_safe", crowd), Th.GREEN })
 		end
 		spec.rows = rows2
 	elseif ty == "expand" or ty == "attack" then
 		if act.ok then
-			spec.hint = string.format(
-				"%s: %s with %s",
+			spec.hint = I18n.t(
+				"ui_hint_ord",
 				verb,
-				if ty == "expand" then "expand" else "attack",
+				I18n.t(if ty == "expand" then "ui_ord_expand" else "ui_ord_attack"),
 				Th.fmt_troops(act.troops)
 			)
 			spec.hint_color = if ty == "expand" then Th.GREEN else Th.AMBER
@@ -1343,7 +1331,7 @@ function UIInteract.hover_spec(self: any, tile: number, pinned: boolean?): { [st
 		end
 	elseif ty == "boat" then
 		if act.ok then
-			spec.hint = string.format("%s: boat invasion with %s", verb, Th.fmt_troops(act.troops))
+			spec.hint = I18n.t("ui_hint_boat", verb, Th.fmt_troops(act.troops))
 			spec.hint_color = Th.CYAN
 			spec.hint_icon = "boat"
 		else
@@ -1359,7 +1347,7 @@ function UIInteract.hover_spec(self: any, tile: number, pinned: boolean?): { [st
 		end
 	end
 	if s.phase == Defs.PHASE_PLAYING and ctx:alive_player() then
-		spec.footer = "Right-click for more actions"
+		spec.footer = I18n.t("ui_rclick_more")
 	end
 	return spec
 end
@@ -1369,9 +1357,9 @@ function UIInteract._aim_spec(self: any, tile: number): { [string]: any }
 	local Th = T()
 	local k = self.aim_kind
 	local nuke = UIRules.is_nuke(k)
-	local title = UIRules.TITLES[k]
+	local title = ctx.rules:title_of(k)
 	local spec = {
-		title = (if nuke then "Launch " else "Build ") .. title,
+		title = I18n.t(if nuke then "ui_title_launch" else "ui_title_build", title),
 		title_color = if nuke then Th.RED else Th.TEXT,
 	} :: { [string]: any }
 	local av = ctx.rules:availability(k)
@@ -1379,43 +1367,43 @@ function UIInteract._aim_spec(self: any, tile: number): { [string]: any }
 	-- Your own structure under the cursor: the click upgrades it (same wording as the touch caption).
 	local upgrade = pl.ok and pl.upgrade == true and not nuke
 	if upgrade then
-		spec.title = string.format("Upgrade %s → Lv %d", title, tonumber(pl.level) or 2)
+		spec.title = I18n.t("ui_title_upgrade", title, tonumber(pl.level) or 2)
 	end
-	local rows = { { "Cost", Th.fmt_cost(av.cost) .. " gold", Th.GOLD } }
+	local rows = { { I18n.t("tt_cost"), I18n.t("tt_gold_fmt", Th.fmt_cost(av.cost)), Th.GOLD } }
 	if nuke then
-		table.insert(rows, { "Blast radius", UIRules.blast_text(k), Th.TEXT })
+		table.insert(rows, { I18n.t("tt_blast"), UIRules.blast_text(k), Th.TEXT })
 		if tile >= 0 and ctx.state:tile_owner(tile) ~= 0 then
-			table.insert(rows, { "Target", ctx.state:owner_name(ctx.state:tile_owner(tile)), Th.TEXT })
+			table.insert(rows, { I18n.t("ui_target_lbl"), ctx:owner_name(ctx.state:tile_owner(tile)), Th.TEXT })
 		end
 		-- Hostile SAM cover of the aimed tile (the view counts it for the current aim).
 		local n_sam = tonumber(ctx:world_call("aim_sams")) or 0
 		if n_sam > 0 and k ~= "mirv" then
 			table.insert(rows, {
-				"SAM cover",
-				string.format("%d SAM%s cover this target", n_sam, if n_sam == 1 then "" else "s"),
+				I18n.t("ui_sam_cover_lbl"),
+				I18n.t(if n_sam == 1 then "ui_sam_cover_one" else "ui_sam_cover_many", n_sam),
 				Th.RED,
 			})
 		end
 	end
 	spec.rows = rows
-	local verb = if ctx.touch then "Tap" else "Click"
+	local verb = I18n.t(if ctx.touch then "verb_tap" else "verb_click")
 	if not pl.ok then
 		spec.hint = tostring(pl.reason)
 		spec.hint_color = Th.RED
 		spec.hint_icon = "info"
 	elseif self._confirm_tile >= 0 and self:_locks_target(k) and not nuke then
-		spec.hint = if upgrade then "Tap again to upgrade" else "Tap again to build here"
+		spec.hint = I18n.t(if upgrade then "ui_tap_upgrade" else "ui_tap_build")
 		spec.hint_color = Th.GREEN
 		spec.hint_icon = "target"
 	elseif nuke and self._confirm_tile >= 0 then
-		spec.hint = verb .. " again to confirm the launch"
+		spec.hint = I18n.t("ui_tap_confirm_launch", verb)
 		spec.hint_color = Th.RED
 		spec.hint_icon = "target"
 	else
-		spec.hint = if nuke
-			then (verb .. " to target")
-			elseif upgrade then (verb .. " to upgrade")
-			else (verb .. " to build here")
+		spec.hint = I18n.t(
+			if nuke then "ui_verb_launch" elseif upgrade then "ui_verb_upgrade" else "ui_verb_build_here",
+			verb
+		)
 		spec.hint_color = Th.GREEN
 		spec.hint_icon = "target"
 		if tostring(pl.warn or "") ~= "" then
@@ -1423,7 +1411,7 @@ function UIInteract._aim_spec(self: any, tile: number): { [string]: any }
 		end
 	end
 	-- (Esc belongs to Roblox's menu; X is the cancel key here.)
-	spec.footer = if not ctx.touch then "Right-click or X to cancel" else "Long-press to cancel"
+	spec.footer = I18n.t(if not ctx.touch then "ui_cancel_desktop" else "ui_cancel_touch")
 	return spec
 end
 
