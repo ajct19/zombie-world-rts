@@ -53,7 +53,7 @@ local function optional(parent: Instance?, path: { string }): any
 	end
 	local ok, mod = pcall(require, node)
 	if not ok then
-		warn("[RoWorld] could not load " .. node:GetFullName() .. ": " .. tostring(mod))
+		warn("[BioFront] could not load " .. node:GetFullName() .. ": " .. tostring(mod))
 		return nil
 	end
 	return mod
@@ -75,7 +75,7 @@ local function call(obj: any, method: string, ...: any): any
 	if not ok then
 		if not call_warned[method] then
 			call_warned[method] = true
-			warn("[RoWorld] " .. method .. " failed: " .. tostring(res))
+			warn("[BioFront] " .. method .. " failed: " .. tostring(res))
 		end
 		return nil
 	end
@@ -498,7 +498,7 @@ function Main.start()
 		if ok then
 			Main.world = w
 		else
-			warn("[RoWorld] WorldView.new failed: " .. tostring(w))
+			warn("[BioFront] WorldView.new failed: " .. tostring(w))
 		end
 	end
 	Main.boot.world = os.clock()
@@ -524,10 +524,10 @@ function Main.start()
 				u:setup(session, Main.world, audio)
 			end)
 			if not ok2 then
-				warn("[RoWorld] UIRoot:setup failed: " .. tostring(err))
+				warn("[BioFront] UIRoot:setup failed: " .. tostring(err))
 			end
 		else
-			warn("[RoWorld] UIRoot.new failed: " .. tostring(u))
+			warn("[BioFront] UIRoot.new failed: " .. tostring(u))
 		end
 	end
 	local ui = Main.ui
@@ -568,7 +568,7 @@ end
 -- roblox://experiences/start?placeId=137151641329864&launchData=autosolo:48,10) starts a Standard solo
 -- match and picks the unclaimed land nearest to lat/lon, so the published game can be verified on a
 -- real Roblox client without clicking through the title. Ignored for everyone else.
-Main.OWNER_USER_ID = 22641473
+Main.OWNER_USER_ID = 0
 function Main.launch_hooks(player: Player)
 	task.spawn(function()
 		local ld = player:GetAttribute("AF_LaunchData")
@@ -634,7 +634,7 @@ function Main.launch_hooks(player: Player)
 				if best ~= nil then
 					session:send_intent({ type = "spawn", tile = best })
 					call(Main.world, "focus_tile", best, -1.0, 1.0)
-					print("[RoWorld] autosolo: spawn requested at tile", best)
+					print("[BioFront] autosolo: spawn requested at tile", best)
 				end
 				return
 			end

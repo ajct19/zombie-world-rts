@@ -208,6 +208,14 @@ end
 
 HelpOverlay.SECTIONS = {
 	{
+		icon = "skull",
+		color = "green",
+		wide = true,
+		zombie_help = true,
+		title = "Zombie Plague Mode",
+		text = "",
+	},
+	{
 		icon = "target",
 		color = "amber",
 		title = "Pick your start",
@@ -258,19 +266,16 @@ HelpOverlay.SECTIONS = {
 --- and effects are RoWorld's own or public domain since that day, and the World map since 2026-10-26).
 --- NOTICE.md and LICENSE in the source have the full text.
 HelpOverlay.LEGAL = {
-	"RoWorld is a modified version of OpenFront. © OpenFront and Contributors. Changes © 2026 Snick Co.",
-	"RoWorld is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3, with the additional terms in its LICENSE file. It comes with ABSOLUTELY NO WARRANTY. The licence comes with RoWorld's source code.",
+	"BioFront: Zombie World RTS is a modified fork of RoWorld (lukechatton/roworld) and OpenFront. © OpenFront and Contributors. RoWorld changes © 2026 Snick Co.",
+	"This software is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3 (LICENSE). It comes with ABSOLUTELY NO WARRANTY.",
 	"Maps made with Natural Earth and NOAA ETOPO1 data (public domain). Country flags from Wikimedia Commons (public domain). Music by Rodrigo Flores.",
-	"RoWorld is not affiliated with or endorsed by OpenFront.",
+	"BioFront is not affiliated with or endorsed by OpenFront or RoWorld.",
 }
---- Where the source lives, under the credits: plain text with the GitHub mark, since Roblox games
---- can't link off-platform (2026-10-25: "Source <github logo> <repo>" at the bottom; the public repo is
---- lukechatton/roworld, lukechatton/rofront is private).
-HelpOverlay.SOURCE_REPO = "lukechatton/roworld"
+HelpOverlay.SOURCE_REPO = "ajct19/zombie-world-rts"
 --- The card that pops up over the repo name when it's pressed (2026-10-25), and how long it stays.
 HelpOverlay.SOURCE_TIP = {
-	title = "Source code",
-	body = "Source available on the github website under " .. HelpOverlay.SOURCE_REPO,
+	title = "Source code (GNU AGPL-3.0)",
+	body = "Open-source repository on GitHub: " .. HelpOverlay.SOURCE_REPO,
 }
 HelpOverlay.SOURCE_TIP_S = 4.0
 
@@ -309,6 +314,7 @@ local COLORS = {
 	orange = "ORANGE",
 	cyan = "CYAN",
 	gold = "GOLD",
+	green = "GREEN",
 	red = "RED",
 	violet = "VIOLET",
 }
@@ -384,11 +390,11 @@ function HelpOverlay._build(self)
 	local tv = UITheme.vbox(2)
 	tv.size_flags_horizontal = W.EXPAND_FILL
 	tv.size_flags_vertical = W.SHRINK_CENTER
-	tv:add_child(UITheme.label("HOW TO PLAY", if not compact then 24 else 18, 800, UITheme.TEXT, 3))
+	tv:add_child(UITheme.label(UICtx.t("help_title"), if not compact then 24 else 18, 800, UITheme.TEXT, 3))
 	local paused = ctx:mode() == UICtx.MODE_SOLO and ctx:in_match()
 	tv:add_child(
 		UITheme.label(
-			"Conquer the real world in seven ideas." .. (if paused then "  ·  Game paused" else ""),
+			UICtx.t("help_sub") .. (if paused then UICtx.t("help_paused") else ""),
 			13,
 			500,
 			UITheme.TEXT_2
@@ -472,9 +478,10 @@ function HelpOverlay._section(self, n: number, d: any)
 	local num = UITheme.label(string.format("%02d", n), 12, 800, c, 1)
 	num.size_flags_vertical = W.SHRINK_CENTER
 	tr:add_child(num)
-	tr:add_child(UITheme.label(d.title, 16, 700))
+	local title = if d.zombie_help then UICtx.t("help_zombie_title") else d.title
+	tr:add_child(UITheme.label(title, 16, 700))
 	v:add_child(tr)
-	local body = HelpOverlay._fill_rules(d.text)
+	local body = if d.zombie_help then UICtx.t("help_zombie_text") else HelpOverlay._fill_rules(d.text)
 	if ctx.touch then
 		body = body:gsub("Right%-click", "Long-press"):gsub("Click", "Tap"):gsub("click", "tap")
 		body = body:gsub(" %(Q / E, or Shift %+ wheel%)", ""):gsub(" with the command bar %(1 – 7%)", " with BUILD")

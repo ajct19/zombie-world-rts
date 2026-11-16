@@ -320,7 +320,11 @@ function LobbyDirectory.create(self: any, starts: number, mode: string?): LobbyR
 		status = "open",
 		code = code,
 		psid = psid,
-		mode = if team then LobbyRules.MODE_TEAM elseif world then LobbyRules.MODE_WORLD else nil,
+		mode = if team
+			then LobbyRules.MODE_TEAM
+			elseif world then LobbyRules.MODE_WORLD
+			elseif mode == LobbyRules.MODE_ZOMBIE then LobbyRules.MODE_ZOMBIE
+			else nil,
 		teams = teams,
 	}
 	local ttl = math.max(60, starts - now + LobbyRules.RECORD_TTL_AFTER_START_S)
@@ -334,7 +338,10 @@ function LobbyDirectory.create(self: any, starts: number, mode: string?): LobbyR
 			l.id,
 			l.map,
 			l.max,
-			if team then ", " .. tostring(teams) .. " teams" else "",
+			if team
+				then ", " .. tostring(teams) .. " teams"
+				elseif mode == LobbyRules.MODE_ZOMBIE then ", Zombie Plague"
+				else "",
 			starts - now
 		)
 	)

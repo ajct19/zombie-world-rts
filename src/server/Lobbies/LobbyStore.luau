@@ -11,7 +11,7 @@ local LobbyRules = require("./LobbyRules")
 
 local LobbyStore = {}
 
-LobbyStore.NAMESPACE = "rofront_v1"
+LobbyStore.NAMESPACE = "biofront_v1"
 LobbyStore.LIST_LIMIT = 50
 
 --- What a record is written as. A team game's record (and World's own kind's, 2026-10-19) keeps its
@@ -19,7 +19,11 @@ LobbyStore.LIST_LIMIT = 50
 --- still run (a delayed restart) they leave those kinds alone (not listed, not counted, never
 --- rewritten without their `mode`). LobbyRules.decode reads either.
 function LobbyStore.encode(v: any): any
-	if type(v) == "table" and (v.mode == "team" or v.mode == "world") and type(v.max) == "number" then
+	if
+		type(v) == "table"
+		and (v.mode == "zombie" or v.mode == "team" or v.mode == "world")
+		and type(v.max) == "number"
+	then
 		local c = table.clone(v)
 		c.slots = v.max
 		c.max = nil

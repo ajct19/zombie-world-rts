@@ -1870,7 +1870,7 @@ function Sim._zombie_tick(self: any)
 		return
 	end
 	if not self.outbreak_spawned and self.tick >= self.outbreak_tick then
-		self:_spawn_outbreaks(2)
+		self:_spawn_outbreaks(if self.solo then 2 else 3)
 		self.outbreak_spawned = true
 		self._d_outbreak = true
 		self._force_stats = true

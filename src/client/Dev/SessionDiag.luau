@@ -101,8 +101,7 @@ function Diag.start(Main: any)
 		elseif op == "join" then
 			session:join_multiplayer()
 		elseif op == "joinlobby" then
-			-- Quick Play: a seat in the soonest free-for-all (`joinlobby world`: World's own kind)
-			local kind = if words[2] == "world" then "world" else "ffa"
+			local kind = if words[2] == "zombie" or words[2] == "team" or words[2] == "world" then words[2] else "ffa"
 			session:join_public(kind)
 			return "asked for a " .. kind
 		elseif op == "leaveline" then
@@ -2012,6 +2011,15 @@ function Diag.start(Main: any)
 					Main.ui.board:set_open(words[3] ~= "0")
 				end
 				return "board " .. tostring(Main.ui and Main.ui.board and Main.ui.board.expanded)
+			elseif sub == "help" then
+				if Main.ui and Main.ui.help then
+					if words[3] == "0" then
+						Main.ui.help:close()
+					else
+						Main.ui.help:open()
+					end
+				end
+				return "help " .. tostring(Main.ui and Main.ui.help and Main.ui.help.is_open)
 			elseif sub == "focus_id" then
 				local oid = tonumber(words[3]) or (st and st.local_owner or 0)
 				local tile = if st ~= nil then st:label_tile(oid) else -1
@@ -2065,6 +2073,15 @@ function Diag.start(Main: any)
 					top_goal = (ui ~= nil and ui.top ~= nil and ui.top._goal ~= nil and ui.top._goal.text) or "",
 					top_grace = (ui ~= nil and ui.top ~= nil and ui.top._grace ~= nil and ui.top._grace.text) or "",
 					board_open = (ui ~= nil and ui.board ~= nil and ui.board.expanded) or false,
+					word = (ui ~= nil and ui.title ~= nil and ui.title._word ~= nil and ui.title._word.text) or "",
+					shop_vis = (ui ~= nil and ui.title ~= nil and ui.title._shop_btn ~= nil and ui.title._shop_btn.visible)
+						or false,
+					general_vis = (
+						ui ~= nil
+						and ui.title ~= nil
+						and ui.title._general_btn ~= nil
+						and ui.title._general_btn.visible
+					) or false,
 					lang = I18n.get(),
 					ui_errors = W.errors.caught,
 				})

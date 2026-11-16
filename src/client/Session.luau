@@ -1422,7 +1422,7 @@ function Session._on_net(self: any, op: number, ...: any)
 			if type(kinds) == "table" then
 				local k = {}
 				for _, m in kinds do
-					if m == "ffa" or m == "team" or m == "world" then
+					if m == "zombie" or m == "ffa" or m == "team" or m == "world" then
 						table.insert(k, m)
 					end
 				end
@@ -1435,7 +1435,7 @@ function Session._on_net(self: any, op: number, ...: any)
 		if st == "joining" or st == "line" or st == "going" or st == "idle" then
 			self.public = {
 				state = st,
-				mode = if mode == "ffa" or mode == "team" or mode == "world" then mode else nil,
+				mode = if mode == "zombie" or mode == "ffa" or mode == "team" or mode == "world" then mode else nil,
 				info = if type(info) == "table" then info else nil,
 			}
 			self:_emit("public_changed", self.public)

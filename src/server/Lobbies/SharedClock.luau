@@ -13,7 +13,7 @@
 
 local SharedClock = {}
 
-SharedClock.STORE = "rofront_clock"
+SharedClock.STORE = "biofront_clock"
 SharedClock.KEY = "probe"
 --- Each measurement writes one of this many keys ("probe1" .. "probe256", at random). A DataStore key
 --- takes a write every few seconds, and every server wrote "probe": at ~880 servers most of those writes

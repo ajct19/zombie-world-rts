@@ -5,6 +5,7 @@
 
 local UITheme = require("./UITheme")
 local W = require("./Widgets")
+local UICtx = require("./UICtx")
 local Signal = UITheme.core("Signal")
 
 local RotateCard = W.class(W.Control)
@@ -27,22 +28,31 @@ function RotateCard.new(c: any)
 	cc.grow_horizontal = W.GROW_BOTH
 	cc.grow_vertical = W.GROW_BOTH
 	self:add_child(cc)
-	self._icon = UITheme.icon_rect("app_icon", 72.0, Color3.new(1, 1, 1))
+	self._icon = UITheme.icon_rect("app_icon", 72.0, Color3.fromRGB(57, 255, 20))
 	self._icon.size_flags_horizontal = W.SHRINK_CENTER
 	cc:add_child(self._icon)
-	local t = UITheme.label("ROTATE YOUR PHONE", 22, 900, UITheme.AMBER, 3)
-	t:set_alignment(W.ALIGN_CENTER)
-	cc:add_child(t)
-	local s = UITheme.label(
-		"RoWorld is played in landscape.\nTurn your device sideways to continue.",
+	self._title = UITheme.label(UICtx.t("rotate_title"), 22, 900, UITheme.AMBER, 3)
+	self._title:set_alignment(W.ALIGN_CENTER)
+	cc:add_child(self._title)
+	self._sub = UITheme.label(
+		UICtx.t("rotate_body"),
 		15,
 		500,
 		UITheme.TEXT_2
 	)
-	s:set_alignment(W.ALIGN_CENTER)
-	cc:add_child(s)
+	self._sub:set_alignment(W.ALIGN_CENTER)
+	cc:add_child(self._sub)
 	self:set_visible(false)
 	return self
+end
+
+function RotateCard.refresh_locale(self)
+	if self._title ~= nil then
+		self._title:set_text(UICtx.t("rotate_title"))
+	end
+	if self._sub ~= nil then
+		self._sub:set_text(UICtx.t("rotate_body"))
+	end
 end
 
 --- Shows / hides the card for the current viewport; fires `changed` when that flips (UIRoot then

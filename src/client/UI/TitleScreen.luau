@@ -498,18 +498,18 @@ function TitleScreen._build_head(self)
 	self._head = UITheme.vbox(0)
 	self._head:set_alignment(W.ALIGN_CENTER)
 	self:add_child(self._head)
-	self._emblem = UITheme.icon_rect("app_icon", 64.0, Color3.new(1, 1, 1))
+	self._emblem = UITheme.icon_rect("app_icon", 60.0, Color3.fromRGB(57, 255, 20))
 	self._emblem.size_flags_horizontal = W.SHRINK_CENTER
 	self._head:add_child(self._emblem)
-	-- Warm glow behind the wordmark (placed after the shades, before the fade).
-	self._glow = image_node(S.title_glow, Color3.new(1, 1, 1), 1.0)
+	-- Biohazard glow behind the wordmark (placed after the shades, before the fade).
+	self._glow = image_node(S.title_glow, Color3.fromRGB(90, 255, 70), 0.85)
 	self:add_child(self._glow)
 	self:move_child(self._glow, 3)
 
-	local word = GradientText.new("ROWORLD", 120, 900)
+	local word = GradientText.new("BIOFRONT", 120, 900)
 	word.spacing = 14
 	word.shadow = { color = Color3.new(0.0, 0.02, 0.08), alpha = 0.55, offset_y = 6, outline = 14 }
-	word:set_colors(Color3.new(1, 1, 1), Color3.new(1.0, 0.8, 0.52))
+	word:set_colors(Color3.fromRGB(230, 255, 215), Color3.fromRGB(57, 255, 20))
 	word.size_flags_horizontal = W.SHRINK_CENTER
 	self._word = word
 	self._head:add_child(word)
@@ -518,7 +518,7 @@ function TitleScreen._build_head(self)
 	self._tag_row:set_alignment(W.ALIGN_CENTER)
 	self._tag_l = tag_line(false)
 	self._tag_r = tag_line(true)
-	self._tag = UITheme.label("CONQUER THE REAL WORLD", 15, 600, Color3.new(0.86, 0.89, 0.97), 6)
+	self._tag = UITheme.label(UICtx.t("title_tag"), 15, 600, Color3.new(0.86, 0.96, 0.88), 6)
 	self._tag_row:add_child(self._tag_l)
 	self._tag_row:add_child(self._tag)
 	self._tag_row:add_child(self._tag_r)
@@ -632,8 +632,9 @@ function TitleScreen._build_dock(self)
 	l1.size_flags_horizontal = W.EXPAND_FILL
 	l1.size_flags_vertical = W.SHRINK_CENTER
 	sec:add_child(l1)
-	local cap = UITheme.caption("Public matches", 11, UITheme.CYAN)
+	local cap = UITheme.caption(UICtx.t("title_public_matches"), 11, UITheme.CYAN)
 	cap.size_flags_vertical = W.SHRINK_CENTER
+	self._public_cap = cap
 	sec:add_child(cap)
 	local l2 = UITheme.hdivider()
 	l2.size_flags_horizontal = W.EXPAND_FILL
@@ -1009,7 +1010,7 @@ function TitleScreen.apply_layout(self)
 	end
 	-- phones too: a line under the dock
 	self._credits:set_visible(true)
-	self._credits:set_text(if compact then TitleScreen.CREDITS_SHORT else TitleScreen.CREDITS)
+	self._credits:set_text(UICtx.t(if compact then "title_credits_short" else "title_credits"))
 	self._credits:set_font_size(if compact then 10 else 11)
 	local cb = if compact then 2.0 else 14.0
 	self._credits:set_anchors(0, 1, 1, 1)
@@ -1097,11 +1098,11 @@ end
 
 function TitleScreen._refresh_greeting(self)
 	local n = self.ctx:username()
-	-- (a RoWorld General is greeted as one: Data/Subscription)
 	local s0 = self.ctx.session
-	local rank = if s0 ~= nil and s0.general == true then "General" else "Commander"
-	local text = if n ~= "Commander" and n ~= "" then ("Welcome, " .. rank .. " " .. n) else ("Welcome, " .. rank)
-	-- game admins (the server told this client which players are bots): say so, so it's easy to check
+	local rank = if s0 ~= nil and s0.general == true then "gen" else "cmd"
+	local named = n ~= "Commander" and n ~= ""
+	local key = "title_welcome_" .. rank .. (if named then "" else "_anon")
+	local text = if named then UICtx.t(key, n) else UICtx.t(key)
 	local s = self.ctx.session
 	if s ~= nil and s.admin_bots ~= nil then
 		text ..= "  ·  Admin"
@@ -1348,6 +1349,14 @@ function TitleScreen.refresh_locale(self)
 	if self._start ~= nil then
 		self._start:set_text(UICtx.t(if self._building_state then "title_deploying" else "title_start"))
 	end
+	if self._public_cap ~= nil then
+		self._public_cap:set_text(UICtx.t("title_public_matches"))
+	end
+	if self._credits ~= nil then
+		self._credits:set_text(UICtx.t(if self.ctx.compact then "title_credits_short" else "title_credits"))
+	end
+	self:_refresh_greeting()
+	self:_refresh_mp()
 	self:_refresh_diff()
 end
 
@@ -1499,19 +1508,16 @@ function TitleScreen._refresh_lobby_cards(self)
 	local soonest: { [string]: any } = {}
 	local has_team = false
 	for _, lb in open do
-		local k = if lb.mode == "team" or lb.mode == "world" then lb.mode else "ffa"
+		local k = if lb.mode == "zombie" or lb.mode == "team" or lb.mode == "world" then lb.mode else "ffa"
 		soonest[k] = soonest[k] or lb
 		has_team = has_team or k == "team"
 	end
-	-- PUBLIC MATCH takes World's seats too (the server's LobbyRules.takes_from; 2026-10-19: the World
-	-- and PUBLIC MATCH buttons can still put players into the same match):
-	-- its next match is World's when that starts sooner (a tie: the free-for-all, as the server picks)
 	local cards_of: { [string]: any } = table.clone(soonest)
 	local w, f = soonest.world, soonest.ffa
 	if w ~= nil and (f == nil or (tonumber(w.starts_in) or 0) < (tonumber(f.starts_in) or 0)) then
 		cards_of.ffa = w
 	end
-	local kinds = self._kinds or (if has_team then { "ffa", "team" } else { "ffa" })
+	local kinds = self._kinds or (if has_team then { "zombie", "ffa", "team" } else { "zombie", "ffa" })
 	-- phones with three kinds side by side: each card is only its title and status line (the whole
 	-- card is the button), or the titles and lines were cut to "GIANT W", "World ·…" (2026-10-19)
 	self._tight = ctx.compact and self._dock_variant ~= "stack" and #kinds >= 3
@@ -1553,20 +1559,20 @@ function TitleScreen._refresh_kind_card(self, card: { [string]: any }, kind: str
 	-- a free-for-all is any map: its card isn't titled with the next one, which a seat may not be in
 	-- (a player, 2026-10-19, kept joining maps they didn't want to play); the status line names it
 	local next_map = nil
-	if kind == "ffa" and not going then
+	if (kind == "ffa" or kind == "zombie") and not going then
 		next_map = map_name
 		map, map_name = nil, nil
 	end
+	local kind_title = if kind == "zombie"
+		then UICtx.t("mp_zombie")
+		elseif kind == "team" then UICtx.t("mp_team")
+		elseif kind == "world" then UICtx.t("mp_world")
+		else UICtx.t("mp_ffa")
 	local tight = self._tight == true
 	if tight then
 		card.icon:set_visible(false)
 		card.thumb_node:set_visible(false)
-		card.title:set_text(
-			if going then string.upper(tostring(map_name or map))
-				elseif kind == "team" then "TEAM GAME"
-				elseif kind == "world" then "WORLD"
-				else "PUBLIC MATCH"
-		)
+		card.title:set_text(if going then string.upper(tostring(map_name or map)) else kind_title)
 	elseif map ~= nil then
 		card.icon:set_visible(false)
 		card.thumb_node:set_visible(true)
@@ -1576,40 +1582,48 @@ function TitleScreen._refresh_kind_card(self, card: { [string]: any }, kind: str
 	else
 		card.icon:set_visible(true)
 		card.thumb_node:set_visible(false)
-		card.title:set_text(if kind == "team" then "TEAM GAME" elseif kind == "world" then "WORLD" else "PUBLIC MATCH")
+		if kind == "zombie" then
+			card.icon:set_icon("skull")
+			card.icon:set_color(Color3.fromRGB(57, 255, 20))
+		else
+			card.icon:set_icon("users")
+			card.icon:set_color(UITheme.CYAN)
+		end
+		card.title:set_text(kind_title)
 	end
 	-- a team game: its teams first ("4 Teams", "Duos", "Humans Vs Nations")
 	local teams = if l ~= nil and l.mode == "team" and l.teams ~= nil
 		then (
 			if type(l.teams) == "number"
-				then string.format("%d Teams", l.teams)
+				then UICtx.t("mp_teams_fmt", l.teams)
 				elseif l.teams == "Humans Vs Nations" and ctx.compact then "H vs N"
 				else tostring(l.teams)
 		)
 		else nil
 	local text
 	if mine and pub.state == "line" then
-		local w = UITheme.fmt_time(math.max(0, math.floor((UICtx.msec() - self._public_since) / 1000)))
-		text = if ctx.compact then ("In line  ·  " .. w) else ("Waiting for a free seat  ·  " .. w)
+		local wt = UITheme.fmt_time(math.max(0, math.floor((UICtx.msec() - self._public_since) / 1000)))
+		text = if ctx.compact then ("In line  ·  " .. wt) else UICtx.t("mp_waiting_seat", wt)
 	elseif mine then
-		text = if pub.state == "going" then "Joining…" else "Finding a seat…"
+		text = UICtx.t(if pub.state == "going" then "mp_joining" else "mp_finding")
 	elseif l ~= nil then
 		local left = math.max(0, math.ceil((tonumber(l.starts_in) or 0) - elapsed))
-		local players = string.format("%d / %d players", tonumber(l.players) or 0, tonumber(l.max) or 0)
+		local p_now = tonumber(l.players) or 0
+		local p_max = tonumber(l.max) or 0
 		if teams ~= nil then
 			text = if ctx.compact and self._dock_variant ~= "stack"
-				then string.format("%s · %d/%d · %s", teams, tonumber(l.players) or 0, tonumber(l.max) or 0, UITheme.fmt_time(left))
-				else string.format("%s  ·  %s  ·  %s", teams, players, UITheme.fmt_time(left))
+				then string.format("%s · %d/%d · %s", teams, p_now, p_max, UITheme.fmt_time(left))
+				else string.format("%s  ·  %d / %d  ·  %s", teams, p_now, p_max, UITheme.fmt_time(left))
 		else
 			text = if ctx.compact and self._dock_variant ~= "stack"
-				then string.format("%d/%d  ·  %s", tonumber(l.players) or 0, tonumber(l.max) or 0, UITheme.fmt_time(left))
-				else string.format("%s  ·  starts in %s", players, UITheme.fmt_time(left))
+				then string.format("%d/%d  ·  %s", p_now, p_max, UITheme.fmt_time(left))
+				else UICtx.t("mp_players_starts", p_now, p_max, UITheme.fmt_time(left))
 			if next_map ~= nil then
-				text = (if ctx.compact then "" else "Next: ") .. tostring(next_map) .. "  ·  " .. text
+				text = (if ctx.compact then "" else UICtx.t("mp_next")) .. tostring(next_map) .. "  ·  " .. text
 			end
 		end
 	else
-		text = if ctx.compact then "Next match soon" else "Next match opening soon"
+		text = UICtx.t(if ctx.compact then "mp_next_soon_short" else "mp_next_soon")
 	end
 	if tight and mine and pub.state == "line" then
 		-- (no CANCEL pill here: a press on the card leaves the line, and the line says so)
@@ -1620,11 +1634,11 @@ function TitleScreen._refresh_kind_card(self, card: { [string]: any }, kind: str
 	card.pill:set_visible(not tight)
 	card.pill_l:set_text(
 		if follower
-			then "LEADER"
-			elseif mine and pub.state == "line" then "CANCEL"
+			then UICtx.t("mp_leader")
+			elseif mine and pub.state == "line" then UICtx.t("mp_cancel")
 			elseif mine then "…"
-			elseif teams ~= nil and not ctx.compact then "JOIN TEAMS"
-			else "JOIN"
+			elseif teams ~= nil and not ctx.compact then UICtx.t("mp_join_teams")
+			else UICtx.t("mp_join")
 	)
 	local ready = not follower and not busy_other and (pub.state == "idle" or (mine and pub.state == "line"))
 	card.btn:set_disabled(not ready or self._joining ~= nil)
@@ -1652,15 +1666,15 @@ function TitleScreen._refresh_mp(self)
 	local n = #players
 	local dot = UITheme.TEXT_3
 	local text = ""
-	local join = "JOIN"
+	local join = UICtx.t("mp_join")
 	local clickable = avail
 	if status == "connecting" then
 		dot = UITheme.AMBER
-		text = if ctx.compact then "Connecting…" else "Connecting to server…"
+		text = if ctx.compact then "Connecting…" else UICtx.t("mp_connecting")
 		join = ""
 		clickable = false
 	elseif not avail then
-		text = if ctx.compact then "Offline" else "Offline  ·  play solo for now"
+		text = if ctx.compact then "Offline" else UICtx.t("mp_offline")
 		join = "RETRY"
 		clickable = true
 	else
@@ -1709,34 +1723,32 @@ function TitleScreen._refresh_mp(self)
 	if ctx:mp_waiting() and self._lobby.kind == "match" then
 		-- a public lobby's own server: the waiting room until the match starts
 		local e = UIMaps.get(self._lobby.map_id)
-		-- a team game says so: "TEAM GAME · 4 TEAMS · FOUR ISLANDS"
 		local tm = self._lobby.teams
-		local kind = if tm == nil
-			then "PUBLIC MATCH"
-			elseif type(tm) == "number" then string.format("TEAM GAME  ·  %d TEAMS", tm)
-			else "TEAM GAME  ·  " .. string.upper(tostring(tm))
+		local kind = if self._lobby.mode == "zombie"
+			then UICtx.t("mp_zombie")
+			elseif tm == nil then UICtx.t("mp_ffa")
+			elseif type(tm) == "number" then string.format("%s · %d", UICtx.t("mp_team"), tm)
+			else UICtx.t("mp_team") .. " · " .. string.upper(tostring(tm))
 		self._q_title:set_text(kind .. "  ·  " .. string.upper(if e then e.name else "World"))
 		local maxp = tonumber(self._lobby.max) or 0
 		local votes = tonumber(self._lobby.votes) or 0
 		local need = math.max(tonumber(self._lobby.votes_needed) or 1, 1)
 		local started = self._lobby.vote_started == true
 		if stage == "lobby" then
-			self._q_status:set_text(
-				(if started then "Voted to start  ·  starting in " else "Match starts in ")
-					.. UITheme.fmt_time(math.ceil(self:_countdown()))
-			)
+			local left_s = UITheme.fmt_time(math.ceil(self:_countdown()))
+			self._q_status:set_text(UICtx.t(if started then "mp_q_voted_in" else "mp_q_starts_in", left_s))
 		elseif stage == "spawn" or stage == "playing" then
-			self._q_status:set_text("Joining the match…")
+			self._q_status:set_text(UICtx.t("mp_joining"))
 		else
-			self._q_status:set_text("Getting the match ready…")
+			self._q_status:set_text(UICtx.t("mp_finding"))
 		end
 		local names = {}
 		for _, p in ipairs(players) do
 			table.insert(names, tostring(p))
 		end
-		local head = if maxp > 0 then string.format("%d / %d players", n, maxp) else string.format("%d players", n)
+		local head = if maxp > 0 then string.format("%d / %d", n, maxp) else string.format("%d", n)
 		self._q_players:set_text(if n > 0 then (head .. ":  " .. table.concat(names, ", ")) else head)
-		self._q_leave:set_text("Leave match")
+		self._q_leave:set_text(UICtx.t("mp_q_leave"))
 		-- vote to start: two thirds of the players here start the match in 10 s (MatchServer.VOTE_SHARE)
 		local can_vote = stage == "lobby" and self._lobby.spectating ~= true
 		self._q_vote:set_visible(can_vote)
@@ -1751,20 +1763,20 @@ function TitleScreen._refresh_mp(self)
 			end
 			self._q_vote:set_text(
 				if started
-					then "Starting…"
-					elseif lonely and solo_in ~= nil then "Vote to start in " .. UITheme.fmt_time(solo_in)
-					elseif lonely then string.format("Vote to start needs %d players", min_players)
-					elseif self._lobby.voted == true then "Voted  ·  " .. tally .. "  (tap to undo)"
-					else "Vote to start  ·  " .. tally
+					then UICtx.t("mp_joining")
+					elseif lonely and solo_in ~= nil then "Vote in " .. UITheme.fmt_time(solo_in)
+					elseif lonely then string.format("%s (%d min)", UICtx.t("mp_q_vote", tally), min_players)
+					elseif self._lobby.voted == true then UICtx.t("mp_q_voted", tally)
+					else UICtx.t("mp_q_vote", tally)
 			)
 			self._q_vote:set_disabled(started or (lonely and self._lobby.voted ~= true))
 		end
 	elseif ctx:mp_waiting() then
 		self._q_vote:set_visible(false)
-		self._q_title:set_text("JOINING MULTIPLAYER")
-		self._q_leave:set_text("Leave queue")
+		self._q_title:set_text(UICtx.t("mp_q_joining"))
+		self._q_leave:set_text(UICtx.t("mp_q_leave"))
 		if stage == "lobby" then
-			self._q_status:set_text("Match starts in " .. UITheme.fmt_time(math.ceil(self:_countdown())))
+			self._q_status:set_text(UICtx.t("mp_q_starts_in", UITheme.fmt_time(math.ceil(self:_countdown()))))
 		elseif stage == "spawn" or stage == "playing" then
 			self._q_status:set_text("Joining the match in progress…")
 		elseif stage == "over" then

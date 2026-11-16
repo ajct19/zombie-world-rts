@@ -422,7 +422,7 @@ function UIRoot._toggle_lang(self)
 end
 
 function UIRoot._on_lang_changed(self)
-	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over, self.board }) do
+	for _, panel in ipairs({ self.title, self.pause, self.top, self.spawn, self.bar, self.over, self.board, self.rotate, self.next_match }) do
 		if panel ~= nil and type(panel.refresh_locale) == "function" then
 			panel:refresh_locale()
 		end
@@ -2254,7 +2254,7 @@ function UIRoot._next_match_go(self, kind: string)
 		self._public_after = UICtx.msec() + 10000
 		return
 	end
-	ctx:session_call("join_public", { "ffa" })
+	ctx:session_call("join_public", { "zombie" })
 end
 
 function UIRoot._update_input_gate(self)
@@ -2606,7 +2606,7 @@ function UIRoot._process(self, delta: number)
 			self._public_after = nil
 		elseif self.ctx:mode() == UICtx.MODE_TITLE and self.ctx:session_call("is_building") ~= true then
 			self._public_after = nil
-			self.ctx:session_call("join_public", { "ffa" })
+			self.ctx:session_call("join_public", { "zombie" })
 		end
 	end
 	if self._next_at ~= nil and UICtx.msec() >= self._next_at then

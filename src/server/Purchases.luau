@@ -69,7 +69,7 @@ local Subscription: any = if IS_ROBLOX
 
 local Purchases = {}
 
-Purchases.STORE = "RofrontPurchases_v1"
+Purchases.STORE = "BiofrontPurchases_v1"
 --- Receipts remembered per player (a retried ProcessReceipt is always about a recent one).
 Purchases.RECEIPTS_KEPT = 100
 Purchases.MAX_CREDITS = 1000

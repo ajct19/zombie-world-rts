@@ -302,7 +302,7 @@ function Analytics.public_join(player: any, result: string, mode: string, wait_s
 		else "Over 60 s"
 	call(deps.custom, player, "Public Join", math.floor(w * 10 + 0.5) / 10, {
 		result,
-		if mode == "team" then "Team" elseif mode == "ffa" then "Free For All" elseif mode == "world" then "World" else "Any",
+		if mode == "zombie" then "Zombie Plague" elseif mode == "team" then "Team" elseif mode == "ffa" then "Free For All" elseif mode == "world" then "World" else "Any",
 		band,
 	})
 end

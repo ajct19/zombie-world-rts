@@ -26,13 +26,11 @@ LobbyRules.TARGET_OPEN = 2
 --- Its lobbies are always on World (WORLD_ID). The free-for-all rotation no longer plays World: a
 --- free-for-all join takes World's seats too (takes_from), so PUBLIC MATCH and WORLD fill the same game
 --- when World is the soonest.
+LobbyRules.MODE_ZOMBIE = "zombie"
 LobbyRules.MODE_FFA = "ffa"
 LobbyRules.MODE_TEAM = "team"
 LobbyRules.MODE_WORLD = "world"
---- Joinable lobbies kept open per kind where team games are on (2026-10-10: one solo public match and
---- one team public match are joinable at all times). Elsewhere: TARGET_OPEN
---- free-for-all lobbies. World's: one, either way.
-LobbyRules.TARGETS_WITH_TEAMS = { ffa = 1, team = 1, world = 1 }
+LobbyRules.TARGETS_WITH_TEAMS = { zombie = 1, ffa = 1, team = 1, world = 1 }
 
 --- The kinds of lobby a join of `mode` may seat in, in no order (the soonest that fits wins): a
 --- free-for-all join (PUBLIC MATCH, any map) takes World's lobbies too (2026-10-19: the
@@ -50,14 +48,14 @@ end
 function LobbyRules.kinds(team_games: boolean?): { { mode: string, target: number } }
 	if team_games then
 		return {
+			{ mode = LobbyRules.MODE_ZOMBIE, target = LobbyRules.TARGETS_WITH_TEAMS.zombie },
 			{ mode = LobbyRules.MODE_FFA, target = LobbyRules.TARGETS_WITH_TEAMS.ffa },
-			{ mode = LobbyRules.MODE_WORLD, target = LobbyRules.TARGETS_WITH_TEAMS.world },
 			{ mode = LobbyRules.MODE_TEAM, target = LobbyRules.TARGETS_WITH_TEAMS.team },
 		}
 	end
 	return {
+		{ mode = LobbyRules.MODE_ZOMBIE, target = LobbyRules.TARGETS_WITH_TEAMS.zombie },
 		{ mode = LobbyRules.MODE_FFA, target = LobbyRules.TARGET_OPEN },
-		{ mode = LobbyRules.MODE_WORLD, target = LobbyRules.TARGETS_WITH_TEAMS.world },
 	}
 end
 --- Public matches play their map at this % of its width and height (the full-size maps felt huge,
@@ -333,23 +331,13 @@ function LobbyRules.public_weights(maps: { any }): { { id: string, weight: numbe
 	local out = {}
 	for _, m in maps do
 		local w = math.max(0, tonumber(m.weight) or 0)
-		if m.id ~= LobbyRules.WORLD_ID then
-			for _, c in (if type(m.categories) == "table" then m.categories else {}) do
-				if LobbyRules.WEIRD_CATEGORIES[c] then
-					w *= LobbyRules.WEIRD_FACTOR
-					break
-				end
-			end
-			table.insert(out, { id = m.id, weight = w })
-		end
-	end
-	-- (2026-10-26: World is the only map, so the playlist is World: without it no lobby is made)
-	if #out == 0 then
-		for _, m in maps do
-			if m.id == LobbyRules.WORLD_ID then
-				table.insert(out, { id = m.id, weight = math.max(0, tonumber(m.weight) or 0) })
+		for _, c in (if type(m.categories) == "table" then m.categories else {}) do
+			if LobbyRules.WEIRD_CATEGORIES[c] then
+				w *= LobbyRules.WEIRD_FACTOR
+				break
 			end
 		end
+		table.insert(out, { id = m.id, weight = w })
 	end
 	return out
 end
@@ -455,21 +443,28 @@ function LobbyRules.watchable(l: Lobby, now: number): boolean
 	return l.status == "started" and l.code ~= nil and (l.beat or l.starts) > now - LobbyRules.LIVE_STALE_S
 end
 
---- A lobby's kind (MODE_FFA / MODE_TEAM / MODE_WORLD).
+--- A lobby's kind (MODE_ZOMBIE / MODE_FFA / MODE_TEAM / MODE_WORLD).
 function LobbyRules.mode_of(l: Lobby): string
-	return if l.mode == LobbyRules.MODE_TEAM or l.mode == LobbyRules.MODE_WORLD then l.mode else LobbyRules.MODE_FFA
+	return if l.mode == LobbyRules.MODE_ZOMBIE or l.mode == LobbyRules.MODE_TEAM or l.mode == LobbyRules.MODE_WORLD
+		then l.mode
+		else LobbyRules.MODE_FFA
 end
 
---- Is `mode` a kind of public match ("ffa" | "team" | "world")?
+--- Is `mode` a kind of public match ("zombie" | "ffa" | "team" | "world")?
 function LobbyRules.is_mode(mode: any): boolean
-	return mode == LobbyRules.MODE_FFA or mode == LobbyRules.MODE_TEAM or mode == LobbyRules.MODE_WORLD
+	return mode == LobbyRules.MODE_ZOMBIE
+		or mode == LobbyRules.MODE_FFA
+		or mode == LobbyRules.MODE_TEAM
+		or mode == LobbyRules.MODE_WORLD
 end
 
 --- What a client sees of a lobby (no access code / server id). Live matches: `live`, `elapsed`.
 function LobbyRules.public_view(l: Lobby, now: number): { [string]: any }
 	local live = l.status == "started"
 	return {
-		mode = if l.mode == LobbyRules.MODE_TEAM or l.mode == LobbyRules.MODE_WORLD then l.mode else nil,
+		mode = if l.mode == LobbyRules.MODE_ZOMBIE or l.mode == LobbyRules.MODE_TEAM or l.mode == LobbyRules.MODE_WORLD
+			then l.mode
+			else nil,
 		teams = if l.mode == LobbyRules.MODE_TEAM then l.teams else nil,
 		id = l.id,
 		map = l.map,
@@ -524,7 +519,9 @@ function LobbyRules.decode(v: any): Lobby?
 		beat = if type(v.beat) == "number" then v.beat else nil,
 		code = if type(v.code) == "string" then v.code else nil,
 		psid = if type(v.psid) == "string" then v.psid else nil,
-		mode = if v.mode == LobbyRules.MODE_TEAM or v.mode == LobbyRules.MODE_WORLD then v.mode else nil,
+		mode = if v.mode == LobbyRules.MODE_ZOMBIE or v.mode == LobbyRules.MODE_TEAM or v.mode == LobbyRules.MODE_WORLD
+			then v.mode
+			else nil,
 		teams = if v.mode == LobbyRules.MODE_TEAM and (type(v.teams) == "number" or type(v.teams) == "string")
 			then v.teams
 			else nil,

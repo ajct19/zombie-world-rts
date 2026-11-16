@@ -737,9 +737,10 @@ function MatchServer._start_match(self: any)
 			if type(info.max) == "number" then
 				config.max_humans = math.max(config.max_humans, info.max)
 			end
-			-- a team game (Core/Teams; staging only for now): no nations in public team
-			-- games, except Humans Vs Nations, which has as many as the match has player slots
-			if info.mode == "team" and info.teams ~= nil then
+			if info.mode == "zombie" then
+				config.game_mode = "zombie"
+				config.zombie_role = "survivor"
+			elseif info.mode == "team" and info.teams ~= nil then
 				config.teams = info.teams
 				if info.teams == MatchServer.HVN then
 					config.nation_limit = if type(info.max) == "number" then info.max else nil
@@ -1284,17 +1285,20 @@ function MatchServer.lobby_info(self: any, peer: any): { [string]: any }
 	local lobby = self.deps.lobby
 	local max = nil
 	local lobby_map = nil
+	local lobby_mode = nil
 	local teams = nil
 	if lobby ~= nil then
 		local ok, info = pcall(lobby.info)
 		if ok and type(info) == "table" then
 			max = info.max
 			lobby_map = info.map_id
+			lobby_mode = info.mode
 			teams = if info.mode == "team" then info.teams else nil
 		end
 	end
 	return {
 		available = true,
+		mode = lobby_mode,
 		-- a team game's teams (a number of teams, "Duos", ...; nil: free for all)
 		teams = teams,
 		-- "match": a public lobby's own server (clients join at once); "hub": the shared queue

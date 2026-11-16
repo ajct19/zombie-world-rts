@@ -1158,6 +1158,9 @@ HANDLERS[Ev.PHASE] = function(self, e)
 	if self.phase == Defs.PHASE_PLAYING and self.playing_since < 0 then
 		self.playing_since = self.tick
 	end
+	if self.phase == Defs.PHASE_PLAYING and self.game_mode == "zombie" and not self.outbreak_spawned then
+		self.outbreak_tick = self.playing_since + Rules.ZOMBIE_OUTBREAK_DELAY_TICKS
+	end
 	self.phase_ticks_left = e[3]
 	self.phase_changed:Fire(self.phase, self.phase_ticks_left)
 end

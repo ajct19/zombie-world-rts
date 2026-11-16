@@ -42,10 +42,10 @@ function NextMatch.new(c: any)
 	local v = T.vbox(16)
 	self._panel:add_child(v)
 	local head = T.vbox(4)
-	self._title = T.label("NEXT MATCH", 26, 800, T.TEXT, 4)
+	self._title = T.label(UICtx.t("next_title"), 26, 800, T.TEXT, 4)
 	self._title.horizontal_alignment = W.ALIGN_CENTER
 	head:add_child(self._title)
-	self._sub = T.label("Pick your next war", 14, 500, T.TEXT_2)
+	self._sub = T.label(UICtx.t("next_sub"), 14, 500, T.TEXT_2)
 	self._sub.horizontal_alignment = W.ALIGN_CENTER
 	head:add_child(self._sub)
 	v:add_child(head)
@@ -53,7 +53,7 @@ function NextMatch.new(c: any)
 	row:set_alignment(W.ALIGN_CENTER)
 	v:add_child(row)
 	self._cards = {}
-	local function card(icon: string, heading: string, text: string, button: string, fire: any): any
+	local function card(icon: string, heading: string, text: string, button: string, fire: any): (any, any, any)
 		local p = GlassPanel.new(18.0, 16.0, T.R_MD, true, 20)
 		p:set_border(T.c(T.CYAN, 0.35))
 		local cv = T.vbox(10)
@@ -85,32 +85,61 @@ function NextMatch.new(c: any)
 		end)
 		cv:add_child(b)
 		row:add_child(p)
-		table.insert(self._cards, { panel = p, text = l, button = b })
-		return l
+		table.insert(self._cards, { panel = p, heading = h, text = l, button = b })
+		return l, h, b
 	end
-	self._solo_text = card("troops", "SOLO", "", "PLAY SOLO", self.solo)
-	card("users", "ONLINE", "Real players from around the world, up to 50 in a match.", "PLAY ONLINE", self.public)
-	self._back = T.button("See results", "GhostButton", "", 40.0)
+	self._solo_text, self._solo_head, self._solo_btn = card("troops", UICtx.t("next_solo_head"), "", UICtx.t("title_play_solo"), self.solo)
+	self._online_text, self._online_head, self._online_btn =
+		card("users", UICtx.t("next_online_head"), UICtx.t("next_online_body"), UICtx.t("next_online_btn"), self.public)
+	self._back = T.button(UICtx.t("next_results"), "GhostButton", "", 40.0)
 	self._back.size_flags_horizontal = W.SHRINK_CENTER
 	self._back:set_font_size(13)
 	self._back.pressed:Connect(function()
 		self:close()
 	end)
 	v:add_child(self._back)
+	self._map_name = nil :: string?
+	self._over_results = true
 	return self
+end
+
+function NextMatch.refresh_locale(self)
+	if self._title ~= nil then
+		self._title:set_text(UICtx.t("next_title"))
+	end
+	if self._sub ~= nil then
+		self._sub:set_text(UICtx.t("next_sub"))
+	end
+	if self._solo_head ~= nil then
+		self._solo_head:set_text(UICtx.t("next_solo_head"))
+	end
+	if self._solo_btn ~= nil then
+		self._solo_btn:set_text(UICtx.t("title_play_solo"))
+	end
+	if self._online_head ~= nil then
+		self._online_head:set_text(UICtx.t("next_online_head"))
+	end
+	if self._online_text ~= nil then
+		self._online_text:set_text(UICtx.t("next_online_body"))
+	end
+	if self._online_btn ~= nil then
+		self._online_btn:set_text(UICtx.t("next_online_btn"))
+	end
+	if self._solo_text ~= nil and self._map_name ~= nil then
+		self._solo_text:set_text(UICtx.t("next_solo_body", self._map_name))
+	end
+	if self._back ~= nil then
+		self._back:set_text(UICtx.t(if self._over_results == false then "next_close" else "next_results"))
+	end
 end
 
 --- `map_name`: the map a solo match would be on; `over_results`: it stands over a results screen
 --- (its foot button goes back to it).
 function NextMatch.open(self, map_name: string?, over_results: boolean?)
 	local ctx = self.ctx
-	self._back:set_text(if over_results == false then "Close" else "See results")
-	self._solo_text:set_text(
-		string.format(
-			"Another war against the computer, on %s.",
-			if map_name ~= nil and map_name ~= "" then map_name else "the same map"
-		)
-	)
+	self._map_name = if map_name ~= nil and map_name ~= "" then map_name else "World"
+	self._over_results = over_results
+	self:refresh_locale()
 	self.is_open = true
 	self:set_visible(true)
 	self:apply_layout()
